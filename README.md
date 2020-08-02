@@ -1,3 +1,3 @@
 # ubergauss
 
-gaussian mixture for clustering and kneepoint detection, wrapper for sklearn 
+gaussian mixture for clustering and kneepoint detection, using sklearn

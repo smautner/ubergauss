@@ -107,6 +107,9 @@ setup(
     license='GPLv3',
     description='wraps sklearn, gmm for clustering and num cluster determination',
     #long_description=open('README.md').read(),
-    install_requires=[],
+    install_requires=[ 
+        'scikit-learn',
+        "kneed"
+        ],
     cmdclass={'sdist': sdist, 'install': install}
 )
