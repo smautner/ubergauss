@@ -73,7 +73,13 @@ def traingmm(n_comp, X=None,n_init=10,**kwargs):
 # get a model
 ####
 
-def get_model(X, poolsize = -1, nclust_min = 4, nclust_max = 20, n_init = 20,covariance_type = 'tied',**kwargs):
+def get_model(X, poolsize = -1,
+                 nclust_min = 4,
+                 nclust_max = 20,
+                 n_init = 20,
+                 covariance_type = 'tied',
+                 kneepoint_detection = diag_maxdist, 
+                 **kwargs):
 
     # trivial case:
     if nclust_min == nclust_max: 
@@ -85,7 +91,7 @@ def get_model(X, poolsize = -1, nclust_min = 4, nclust_max = 20, n_init = 20,cov
 
     # kneepoint
     bics = [m.bic(X) for m in models]
-    best = diag_maxdist(bics)
+    best = kneepoint_detection(bics)
     return models[best]
 
 
