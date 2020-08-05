@@ -19,5 +19,11 @@ import ubergauss as ug
 
 
 # trian gmm 
-ug.get_model(X, poolsize = -1, nclust_min = 4, nclust_max = 20, n_init = 30,covariance_type = 'tied',**kwargs)
+ug.get_model(X, poolsize = -1, 
+                nclust_min = 4, 
+                nclust_max = 20, 
+                n_init = 30,
+                covariance_type = 'tied',
+                kneepoint_detection = diag_maxdist,
+                **kwargs)
 ```
