@@ -105,11 +105,10 @@ setup(
     package_data={},
     url='https://github.com/smautner/ubergauss',
     license='GPLv3',
-    description='wraps sklearn, gmm for clustering and num cluster determination',
+    description='sklearn clustering, betweenGaussian and diagonal-max-dist kneepoint detection',
     #long_description=open('README.md').read(),
     install_requires=[ 
-        'scikit-learn',
-        "kneed"
+        'scikit-learn'
         ],
     cmdclass={'sdist': sdist, 'install': install}
 )
