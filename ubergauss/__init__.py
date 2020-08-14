@@ -77,7 +77,8 @@ def get_model(X, poolsize = -1,
                  nclust_min = 4,
                  nclust_max = 20,
                  n_init = 30,
-                 covariance_type = 'tied',
+                 covariance_type = 'full',
+                 use_bic = False, # bic or aic ;; aic should result in more clusters ;; penalty is lower for generating more clusters
                  kneepoint_detection = diag_maxdist, 
                  **kwargs):
 
@@ -90,8 +91,8 @@ def get_model(X, poolsize = -1,
     models = mpmap( train , range(nclust_min,nclust_max), poolsize= poolsize)
 
     # kneepoint
-    bics = [m.bic(X) for m in models]
-    best = kneepoint_detection(bics)
+    scores = [m.bic(X) if use_bic else m.aic(X) for m in models]
+    best = kneepoint_detection(scores)
     return models[best]
 
 
