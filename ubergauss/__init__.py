@@ -57,7 +57,10 @@ def diag_maxdist(values):
 # multiprocessing
 ###
 def mpmap(func, iterable, chunksize=1, poolsize=2):                            
-    pool = mp.Pool(poolsize)                                                    
+    if poolsize < 1:
+        pool=mp.Pool()
+    else:
+        pool = mp.Pool(poolsize)                                                    
     result = pool.map(func, iterable, chunksize=chunksize)                      
     pool.close()                                                                
     pool.join()                                                                 
