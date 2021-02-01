@@ -58,10 +58,7 @@ def diag_maxdist(values, debug=True):
 # multiprocessing
 ###
 def mpmap(func, iterable, chunksize=1, poolsize=2):                            
-    if poolsize < 1:
-        pool=mp.Pool()
-    else:
-        pool = mp.Pool(poolsize)                                                    
+    pool = mp.Pool(poolsize)                                                    
     result = pool.map(func, iterable, chunksize=chunksize)                      
     pool.close()                                                                
     pool.join()                                                                 
@@ -93,7 +90,10 @@ def get_model(X, poolsize = -1,
 
     # train models
     train = functools.partial(traingmm,X=X,n_init=n_init,**kwargs)
-    models = mpmap( train , range(nclust_min,nclust_max), poolsize= poolsize)
+    if poolsize < 2: 
+        models = [train(x) for x in range(nclust_min, nclust_max)]
+    else:
+        models = mpmap( train , range(nclust_min,nclust_max), poolsize= poolsize)
 
     # kneepoint
     scores = [m.bic(X) if use_bic else m.aic(X) for m in models]
