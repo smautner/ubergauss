@@ -27,3 +27,12 @@ ug.get_model(X, poolsize = -1,
                 kneepoint_detection = diag_maxdist,
                 **kwargs)
 ```
+
+
+
+# sigma boxplot
+
+![''](https://raw.githubusercontent.com/smautner/ubergauss/master/test/Figure_1.png)
+![''](https://raw.githubusercontent.com/smautner/ubergauss/master/test/Figure_2.png)
+
+
