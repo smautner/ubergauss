@@ -34,7 +34,7 @@ def between_gaussians(values):
 #  kneed implementaiton is annoying, 
 ######
 
-def diag_maxdist(values): 
+def diag_maxdist(values, debug=True): 
     points = [ (x,y) for x,y in enumerate(values)  ]
     x1,y1 = points[0]
     x2,y2 = points[-1]
@@ -44,8 +44,9 @@ def diag_maxdist(values):
 
 
     res  =list(map(dist,points))
-    if not (all ( map( lambda x: x>=0, res)) or all(map(lambda x: x<=0 ,res))):
-        print ("ubergauss.diag_maxdist encountered strange data: dist to diagonal", res)
+    if debug:
+        if not (all ( map( lambda x: x>=0, res)) or all(map(lambda x: x<=0 ,res))):
+            print ("ubergauss.diag_maxdist encountered strange data: dist to diagonal", res, points)
     return np.argmax(np.abs(res))
 
 
@@ -79,7 +80,8 @@ def get_model(X, poolsize = -1,
                  n_init = 30,
                  covariance_type = 'full',
                  use_bic = False, # bic or aic ;; aic should result in more clusters ;; penalty is lower for generating more clusters
-                 kneepoint_detection = diag_maxdist, 
+                 kneepoint_detection = lambda x: diag_maxdist(x,False), 
+                 debug = False,
                  **kwargs):
 
     # trivial case:
@@ -88,7 +90,10 @@ def get_model(X, poolsize = -1,
 
     # train models
     train = functools.partial(traingmm,X=X,n_init=n_init,**kwargs)
-    models = mpmap( train , range(nclust_min,nclust_max), poolsize= poolsize)
+    if poolsize < 2: 
+        models = [train(x) for x in range(nclust_min, nclust_max)]
+    else:
+        models = mpmap( train , range(nclust_min,nclust_max), poolsize= poolsize)
 
     # kneepoint
     scores = [m.bic(X) if use_bic else m.aic(X) for m in models]
