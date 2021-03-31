@@ -36,7 +36,7 @@ def readfile(fname):
 #################
 # fit 
 ###############
-def ex(d, out):
+def ex(d, out=2.576):
     # return [ourliers],sigma1, median, sigma2 , [outliers]
     #med  = np.median(d)
     #a = [v for v in d if v >=med]
@@ -95,8 +95,31 @@ def draw(data,smooth):
     
     
 
+
+def boxplot(d,x =1): 
+    # how wide is the box? 
+    width = min(.5,.15*(max(d)-min(d))) 
+
+    # how tall is the box? 
+    oa,a,med,b,ob = ex(d)
+    hight = b-a
+
+    # draw the box
+    rectangle = plt.Rectangle((x-.5*width,a), width, hight,ec="black",fill=False)
+    plt.gca().add_patch(rectangle)
+    # draw the median 
+    line = plt.Line2D((x-.5*width, x+.5*width), (med, med), lw=1.5, color='orange')
+    plt.gca().add_line(line)
+    # draw the outliers
+    plt.scatter([x]*len(oa+ob), oa+ob, edgecolors='black', c='white')
+
+
 if __name__ == "__main__":
     data = readfile("../test/counts.txt")
     draw(data,False)
     plt.ylim((40,150))
     plt.show()
+
+    boxplot([1,2,3,4,5,6,7,7,100])
+    plt.show()
+
