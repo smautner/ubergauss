@@ -9,9 +9,9 @@ import math
 # choose value between gaussians
 ###
 
-def gmm2(values):
+def gmm2(values,**kwargs):
     A=np.array(values).reshape(-1, 1)
-    model = gmm(n_components=2, n_init=10).fit(A)
+    model = gmm(n_components=2, n_init=10,**kwargs).fit(A)
     return model.predict_proba(A), model
 
 def only_between(cluster_probs,Y,gmm_means):
@@ -21,8 +21,8 @@ def only_between(cluster_probs,Y,gmm_means):
     cluster_probs[filtr]=0 
     return cluster_probs
 
-def between_gaussians(values):
-    cluster_probs, model = gmm2(values)
+def between_gaussians(values,**kwargs):
+    cluster_probs, model = gmm2(values,**kwargs)
     cprobs = cluster_probs.sum(axis=1)
     cprobs = only_between(cprobs,values, model.means_)
     return np.argmax(cprobs)
