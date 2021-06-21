@@ -31,25 +31,25 @@ def update_version_py():
 
 
     except EnvironmentError:
-        print(f"unable to run git, leaving {packname}/_version.py alone")
+        print(f"unable to run git, leaving {packname}/__version__.py alone")
         return
     stdout = p.communicate()[0].decode("utf-8")
 
     print ("stdout:",stdout)
     if p.returncode != 0:
-        print(f"unable to run git, leaving {packname}/_version.py alone")
+        print(f"unable to run git, leaving {packname}/__version__.py alone")
         return
     ver = "0.0."+stdout.strip()
     #ver = str(int(ubergauss,16)) # pypi doesnt like base 16
-    f = open(f"{packname}/_version.py", "w")
+    f = open(f"{packname}/__version__.py", "w")
     f.write(VERSION_PY % ver)
     f.close()
-    print(f"set {packname}/_version.py to '%s'" % ver)
+    print(f"set {packname}/__version__.py to '%s'" % ver)
 
 
 def get_version():
     try:
-        f = open(f"{packname}/_version.py")
+        f = open(f"{packname}/__version__.py")
     except EnvironmentError:
         return None
     for line in f.readlines():
@@ -108,7 +108,7 @@ setup(
     description='sklearn clustering, betweenGaussian and diagonal-max-dist kneepoint detection',
     #long_description=open('README.md').read(),
     install_requires=[ 
-        'scikit-learn'
+        'scikit-learn', 'lmz'
         ],
     cmdclass={'sdist': sdist, 'install': install}
 )

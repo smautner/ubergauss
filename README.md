@@ -35,4 +35,5 @@ ug.get_model(X, poolsize = -1,
 ![''](https://raw.githubusercontent.com/smautner/ubergauss/master/test/Figure_1.png)
 ![''](https://raw.githubusercontent.com/smautner/ubergauss/master/test/Figure_2.png)
 
-
+# fake bayes
+![''](https://raw.githubusercontent.com/smautner/ubergauss/master/test/fakeprocess.png)
