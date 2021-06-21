@@ -2,6 +2,7 @@ from lmz import *
 import numpy as np
 import matplotlib.pyplot as plt
 def logistic(x):
+    x/=2
     return np.exp(x)/(np.exp(x)+1)
 
 def getavgslope(myx, ydata):
@@ -16,7 +17,7 @@ def getavgslope(myx, ydata):
     meanslope = np.mean(slopes)
     return meanslope
 
-def suggest(aruX, aruY, plot = False):
+def suggest(aruX, aruY,bravery =1 , plot = False):
     
     aruX, aruY = Transpose(sorted(zip(aruX,aruY)))
     
@@ -31,10 +32,13 @@ def suggest(aruX, aruY, plot = False):
         x2 = aruX[i]
         y1 = aruY[i-1]
         y2 = aruY[i]
-        nuyy = max(y1,y2) + ((x2-x1)/xspan)*yspan  #std 
+        
         slope= (y2-y1)/abs(x1-x2)
         nuxx = x2-x1
         nuxx = logistic(slope/meanslope)*nuxx+x1
+        
+        nuyy = max(y1,y2) + bravery*logistic(-abs(slope)/meanslope)*((x2-x1)/(xspan))*yspan 
+        
         newyx.append((nuyy,nuxx))
         
     newyx.sort(reverse = True)
@@ -45,4 +49,3 @@ def suggest(aruX, aruY, plot = False):
         plt.legend()
         plt.show()
     return x,y
-        
