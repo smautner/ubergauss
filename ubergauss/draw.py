@@ -36,15 +36,14 @@ def readfile(fname):
 #################
 # fit 
 ###############
-def ex(d, out=2.576):
-    # return [ourliers],sigma1, median, sigma2 , [outliers]
-    #med  = np.median(d)
-    #a = [v for v in d if v >=med]
-    #b = [v for v in d if v <=med]
-    a,med,b = np.percentile(d, [15.9, 50, 84.1])
 
-    #_,sa = stats.halfnorm.fit(a)
-    #_,sb = stats.halfnorm.fit(-np.array(b))
+def ex(d, out=2.576):
+    """
+        d: list of values(y) at a single x position
+        
+        return: [[outlier, low], 15.9 percentile, 50% percentile, 84.1 percentile, [outlier high]]
+    """
+    a,med,b = np.percentile(d, [15.9, 50, 84.1])
     oa = [v for v in d if v < med-out*(med-a)]
     ob = [v for v in d if v > med+out*(b-med)]
 
@@ -56,10 +55,12 @@ def ex(d, out=2.576):
 # PUT STUFF TOGETHER 
 ###############
 
-def draw(data,smooth):
-    # data is [[ally for first x],[all y for second x],...]
+def draw(data,smooth = False):
+    """
+        data: list of list of numbers :) 
 
-
+        does: plot median line, areafill+-sigma, outliers as +
+    """
     stuff = [ex(rr,2.576) for rr in data]
     LR,LOW,MED,HI,HR = Transpose(stuff)
     X= Range(MED)
@@ -92,8 +93,8 @@ def draw(data,smooth):
     plt.xticks(X)
     plt.legend()
 
-    
-    
+
+
 
 
 def boxplot(d,x =1): 
@@ -115,6 +116,11 @@ def boxplot(d,x =1):
 
 
 if __name__ == "__main__":
+
+    # import matplotlib
+    # matplotlib.use("module://matplotlib-sixel")
+    # import matplotlib.pyplot as plt
+
     data = readfile("../test/counts.txt")
     draw(data,False)
     plt.ylim((40,150))
