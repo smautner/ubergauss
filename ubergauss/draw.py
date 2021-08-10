@@ -115,6 +115,13 @@ def boxplot(d,x =1):
     plt.scatter([x]*len(oa+ob), oa+ob, edgecolors='black', c='white')
 
 
+
+
+def plotsmoothline(datax, datay):
+    popt, pcov = curve_fit(f, datax ,datay)
+    X = np.linspace(min(datax), max(datax), 100)
+    plt.plot(X, map(lambda x:f(x,*popt), X))
+
 if __name__ == "__main__":
 
     # import matplotlib
