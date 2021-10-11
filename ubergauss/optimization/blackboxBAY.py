@@ -67,14 +67,14 @@ class BAY:
     ################
     # TPE model
     ##################
-    def fit(self, draw=False):
+    def fit(self, sample=0, draw=False):
         assert len(self.params) > 1, 'do some random guessing first'
 
         if 'model'  in self.__dict__:
             #self.space= [(x.min(),x.max()) for x in self.model[0].T]
             pass
 
-        f = forest.RandomForestRegressor(n_estimators = 500)
+        f = forest.RandomForestRegressor(n_estimators = 50)
         f.fit(np.array(self.params), self.values)
 
         '''
@@ -84,35 +84,42 @@ class BAY:
         X = cartesian_product(X)
         Y,S = f.predict(X, return_std= True)
 
-        '''
+        ie = Y-1*S # expected valies
 
-        '''
-        ie = Y-S # expected valies
-
-        XNU = X[ie < min(self.values)]
-        ieNU = ie[ie < min(self.values)]-min(self.values)
+        cut = np.median(ie)
+        XNU = X[ie < cut]
+        ieNU = ie[ie < cut]-cut
         ieNU = -ieNU
         ieNU/=max(ieNU)
         ieNU = ieNU*ieNU.T
-        #ieNU = ieNU*ieNU.T
-
-        # softmax
-        #ieNU = softmax(ieNU)
-        #ieNU= np.log2(ieNU)
-
-
-
-        plt.figure(figsize=(9,3))
-        plt.subplot(131)
-        d2plot(np.array(self.params),self.values, title = 'sampled data')
-        plt.subplot(132)
-        d2plot(X,ie, title = 'prediction - 2*std')
-        plt.subplot(133)
-        d2plot(XNU,ieNU, title = 'sampleweight')
-        plt.show()
-        plt.close()
-
         self.model = XNU, ieNU
+
+        probe_here = 0
+        if sample:
+            probe_here = self.sample(sample)
+
+        if draw:
+            plt.figure(figsize=(9,6))
+
+            plt.subplot(231)
+            d2plot(np.array(self.params),self.values, title = 'sampled data')
+            plt.subplot(232)
+            d2plot(X,np.log2(Y), title = 'log predict')
+            plt.subplot(233)
+            d2plot(X,S, title = 'std')
+            plt.subplot(234)
+            d2plot(X,np.log(ie), title = 'log prediction - std')
+
+            plt.subplot(235)
+            d2plot(XNU,ieNU, title = 'sampleweight')
+
+            if sample:
+                plt.subplot(236)
+                d2plot(np.array(probe_here),y='r', title = 'new samples')
+            plt.show()
+            plt.close()
+        return probe_here
+
 
     def sample(self, num):
         # so we sample,,, ie are the weights...
@@ -162,17 +169,15 @@ def myf(args):
 
 if __name__ == "__main__":
     opti = BAY(myf,[(-100,100),(-100,100)],n_init = 5)
-    opti.fit(draw=True)
 
-
-    if False:
-        for i in range(5):
-            pt  = opti.sample(3)
-            score = [myf(x) for x in pt]
-            opti.register(pt,score)
-            opti.fit(draw=True)
 
     if True:
+        for i in range(5):
+            pt = opti.fit(draw=True, sample = 3)
+            score = [myf(x) for x in pt]
+            opti.register(pt,score)
+
+    if False:
         for i in range(10):
             pt  = opti.bestsuggestion()
             score = [myf(pt)]
