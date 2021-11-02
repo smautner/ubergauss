@@ -23,3 +23,19 @@ def zehidense(X):
     if sparse.issparse(X):
         return X.todense()
     return X
+
+def cartesian_product(arrays):
+    la = len(arrays)
+    dtype = np.find_common_type([a.dtype for a in arrays], [])
+    arr = np.empty([len(a) for a in arrays] + [la], dtype=dtype)
+    for i, a in enumerate(np.ix_(*arrays)):
+        arr[..., i] = a
+    return arr.reshape(-1, la)
+
+
+
+
+def maxnum(X):
+    return np.nanmax( np.where(np.isinf(X),-np.Inf,X) )
+def minnum(X):
+    return np.nanmin( np.where(np.isinf(X),np.Inf,X) )

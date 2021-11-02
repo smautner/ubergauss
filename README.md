@@ -36,4 +36,7 @@ ug.get_model(X, poolsize = -1,
 ![''](https://raw.githubusercontent.com/smautner/ubergauss/master/test/Figure_2.png)
 
 # optimization:
+
+blackboxBORE is the one that works best
+
 ![''](https://raw.githubusercontent.com/smautner/ubergauss/master/test/optimize.png)
