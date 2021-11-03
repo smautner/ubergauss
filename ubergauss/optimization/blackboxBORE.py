@@ -7,24 +7,12 @@ from lmz import *
 import forest
 from ubergauss.tools import cartesian_product, xmap, maxnum
 from sklearn import ensemble
-'''
-ok TPE is terrible so lets  go to bayesian...
 
-- we have a function and a space to optimize...
-- fit the trees with variance estimation
-- predict...
-- draw
-- sample
-- repeat
+'''
+BORE optimizes by just using prediction rations for the pos/negative classes on a classifier that can
+output probabilities...
 '''
 
-def mpmap(func, iterable, chunksize=1, poolsize=5):
-    """pmap."""
-    pool = mp.Pool(poolsize)
-    result = pool.map(func, iterable, chunksize=chunksize)
-    pool.close()
-    pool.join()
-    return list(result)
 
 def get_grid(space):
         X = [np.linspace(a,b,100) for a,b in space]
@@ -36,6 +24,8 @@ def get1index(clf):
         return 0
     else:
         return 1
+
+
 
 class BAY:
     '''
@@ -76,7 +66,7 @@ class BAY:
             n_iter -= n_jobs
 
     ################
-    # TPE model
+    # Fitting..
     ##################
     def fit(self, sample=0, draw=False):
         assert len(self.params) > 1, 'do some random guessing first'
@@ -85,8 +75,8 @@ class BAY:
             #self.space= [(x.min(),x.max()) for x in self.model[0].T]
             pass
 
-        fpos = ensemble.RandomForestClassifier(n_estimators=5)
-        fneg = ensemble.RandomForestClassifier(n_estimators=5)
+        fpos = ensemble.RandomForestClassifier(n_estimators=50)
+        fneg = ensemble.RandomForestClassifier(n_estimators=50)
 
         #fpos = ensemble.RandomForestRegressor(n_estimators=5)
         #fneg = ensemble.RandomForestRegressor(n_estimators=5)
@@ -101,7 +91,7 @@ class BAY:
         values[argsrt[:cut]] = 1
         vinf = (values+1)%2
         fpos.fit(param, values)
-        fneg.fit(param, vinf)
+        #fneg.fit(param, vinf)
 
 
         #for p,v in zip(param,values): print(f"{p} {myf(p)} {v}")
@@ -121,23 +111,24 @@ class BAY:
         #Y1,Y2 = fpos.predict(X), fneg.predict(X)
         # TODO  Y2 being zero is a problem..
         #  with obvious solutions y2==0 -> picj definitely from there
-        ie = Y1.flatten() / (Y2+0.00001).flatten()
-        #i =  maxnum(ie)*2
+        Y1f = Y1.flatten()
+        Y2f = Y2.flatten()
+        ie = Y1f/Y2f
+        ie = np.where(ie != np.inf, ie, Y1f * maxnum(ie)*2)
         #ie = np.nan_to_num(ie,posinf=i, nan = i, neginf = i)
         ieNU = ie
         XNU = X
 
         ieNU = ieNU*ieNU.T
-        #ieNU = ieNU*ieNU.T
 
         # ieNU = np.log(ie)
         # XNU = X[ieNU > 0]
         # ieNU = ieNU[ieNU > 0]
 
+        cut = np.median(ieNU)
+        XNU = X[ieNU > cut]
+        ieNU = ieNU[ieNU > cut]
         '''
-        cut = np.median(ie)
-        XNU = X[ie > cut]
-        ieNU = ie[ie > cut]
         #ieNU = -ieNU
         #ieNU/=max(ieNU)
         #ieNU = ieNU*ieNU.T
@@ -161,11 +152,9 @@ class BAY:
             d2plot(X,ie, title = 'pos/neg')
             plt.subplot(235)
             d2plot(XNU,ieNU, title = 'sampleweight')
-
             if sample:
                 plt.subplot(236)
                 d2plot(np.array(probe_here),y='r', title = 'new samples')
-
             plt.show()
             plt.close()
         return probe_here
