@@ -107,8 +107,8 @@ setup(
     license='GPLv3',
     description='sklearn clustering, betweenGaussian and diagonal-max-dist kneepoint detection',
     #long_description=open('README.md').read(),
-    install_requires=[ 
-        'scikit-learn', 'lmz'
+    install_requires=[
+        'scikit-learn', 'lmz', 'dill', 'scipy', 'numpy'
         ],
     cmdclass={'sdist': sdist, 'install': install}
 )

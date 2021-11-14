@@ -12,6 +12,8 @@ def xmap(func, iterable, processes=None):
 import numpy as np
 from scipy.stats import spearmanr
 from scipy import sparse
+import dill
+import json
 
 def spearman(x,y):
     spear = lambda ft: np.abs(spearmanr(ft.T,y)[0])
@@ -32,6 +34,16 @@ def cartesian_product(arrays):
         arr[..., i] = a
     return arr.reshape(-1, la)
 
+
+
+def np_bool_select(numpi, bools):
+    return np.array([x for x,y in zip(numpi,bools) if y  ])
+
+dumpfile = lambda thing, filename: dill.dump(thing, open(filename, "wb"))
+loadfile = lambda filename: dill.load(open(filename, "rb"))
+
+jdumpfile = lambda thing, filename:  open(filename,'w').write(json.dumps(thing))
+jloadfile = lambda filename:  json.loads(open(filename,'r').read())
 
 
 

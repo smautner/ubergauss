@@ -4,7 +4,6 @@ import numpy as np
 import multiprocessing as mp
 from matplotlib.patches import Ellipse
 from lmz import *
-import forest
 from ubergauss.tools import cartesian_product, xmap, maxnum
 from sklearn import ensemble
 
@@ -141,20 +140,21 @@ class BAY:
             probe_here = self.sample(sample)
 
         if draw:
+            xylim = self.space
             plt.figure(figsize=(9,6))
             plt.subplot(231)
-            d2plot(np.array(self.params),self.values, title = 'sampled data')
+            d2plot(np.array(self.params),self.values, title = 'sampled data', xylim = xylim)
             plt.subplot(232)
-            d2plot(X,Y1, title = 'POS')
+            d2plot(X,Y1, title = 'POS', xylim = xylim)
             plt.subplot(233)
-            d2plot(X,Y2, title = 'NEG')
+            d2plot(X,Y2, title = 'NEG', xylim = xylim)
             plt.subplot(234)
-            d2plot(X,ie, title = 'pos/neg')
+            d2plot(X,ie, title = 'pos/neg', xylim = xylim)
             plt.subplot(235)
-            d2plot(XNU,ieNU, title = 'sampleweight')
+            d2plot(XNU,ieNU, title = 'sampleweight', xylim = xylim)
             if sample:
                 plt.subplot(236)
-                d2plot(np.array(probe_here),y='r', title = 'new samples')
+                d2plot(np.array(probe_here),y='r', title = 'new samples', xylim = xylim)
             plt.show()
             plt.close()
         return probe_here
@@ -182,10 +182,10 @@ import matplotlib
 matplotlib.use("module://matplotlib-sixel")
 import matplotlib.pyplot as plt
 
-def d2plot(X,y, done = False, title = None):
-    pl=plt.scatter(X[:,1],X[:,0], c= y,s=9)
-    plt.xlim(-100,100)
-    plt.ylim(-100,100)
+def d2plot(X,y, done = False, title = None,xylim=None):
+    pl=plt.scatter(X[:,0],X[:,1], c= y,s=9)
+    plt.xlim(*xylim[0])
+    plt.ylim(*xylim[1])
     plt.colorbar(pl)
     if title:
         plt.title(title)
@@ -197,7 +197,8 @@ def d2plot(X,y, done = False, title = None):
 
 
 def myf(args):
-    return abs(args[0]**2)+abs(args[1]**2)
+    #return (args[0]**2)+(args[1]**2)
+    return min(((args[0]+30)**2)+((args[1]+90)**2), ((args[0]-30)**2)+((args[1]-60)**2))
 
 
 
