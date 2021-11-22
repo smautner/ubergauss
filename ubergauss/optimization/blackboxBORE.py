@@ -88,6 +88,8 @@ class BAY:
         cut = max(int(len(self.values)/4),1)
         values = np.zeros(len(self.values))
         values[argsrt[:cut]] = 1
+
+        #tools.binarize(self.values,.25) -> i  should be using this :)
         vinf = (values+1)%2
         fpos.fit(param, values)
         #fneg.fit(param, vinf)

@@ -51,3 +51,14 @@ def maxnum(X):
     return np.nanmax( np.where(np.isinf(X),-np.Inf,X) )
 def minnum(X):
     return np.nanmin( np.where(np.isinf(X),np.Inf,X) )
+
+
+def binarize(X,posratio):
+    '''
+    lowest posratio -> 1 ;; rest 0
+    '''
+    argsrt = np.argsort(X)
+    cut = max(int(len(X)*posratio),1)
+    values = np.zeros(len(X))
+    values[argsrt[:cut]] = 1
+    return values
