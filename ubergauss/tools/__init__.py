@@ -63,23 +63,12 @@ def ndumpfile(thing,filename):
     else:
         np.savez_compressed(filename,a=0,b=thing)
 
-<<<<<<< HEAD
 def maxnum(X):
     return np.nanmax( np.where(np.isinf(X),-np.Inf,X) )
 def minnum(X):
     return np.nanmin( np.where(np.isinf(X),np.Inf,X) )
 
 
-def binarize(X,posratio):
-    '''
-    lowest posratio -> 1 ;; rest 0
-    '''
-    argsrt = np.argsort(X)
-    cut = max(int(len(X)*posratio),1)
-    values = np.zeros(len(X))
-    values[argsrt[:cut]] = 1
-    return values
-=======
 def nloadfile(filename):
     z = np.load(filename+'.npz', allow_pickle=True)
     num = int(z['a'])
@@ -101,4 +90,12 @@ if __name__ == "__main__":
     print(nloadfile('aadump'))
     sdumpfile(sparse.csr_matrix(a),'sdump')
     print(sloadfile('sdump'))
->>>>>>> ccde812e2aeac68d1f320df1a90508eb0a43b2a4
+def binarize(X,posratio):
+    '''
+    lowest posratio -> 1 ;; rest 0
+    '''
+    argsrt = np.argsort(X)
+    cut = max(int(len(X)*posratio),1)
+    values = np.zeros(len(X))
+    values[argsrt[:cut]] = 1
+    return values
