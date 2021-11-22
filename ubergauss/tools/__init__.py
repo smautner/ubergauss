@@ -39,6 +39,15 @@ def cartesian_product(arrays):
 def np_bool_select(numpi, bools):
     return np.array([x for x,y in zip(numpi,bools) if y  ])
 
+
+
+def maxnum(X):
+    return np.nanmax( np.where(np.isinf(X),-np.Inf,X) )
+def minnum(X):
+    return np.nanmin( np.where(np.isinf(X),np.Inf,X) )
+
+
+
 dumpfile = lambda thing, filename: dill.dump(thing, open(filename, "wb"))
 loadfile = lambda filename: dill.load(open(filename, "rb"))
 
@@ -46,7 +55,15 @@ jdumpfile = lambda thing, filename:  open(filename,'w').write(json.dumps(thing))
 jloadfile = lambda filename:  json.loads(open(filename,'r').read())
 
 
+def ndumpfile(thing,filename):
+    if type(thing) == list:
+        d= { chr(i+98):e  for i,e in enumerate(thing)}
+        d['a'] = len(thing)
+        np.savez_compressed(filename, **d)
+    else:
+        np.savez_compressed(filename,a=0,b=thing)
 
+<<<<<<< HEAD
 def maxnum(X):
     return np.nanmax( np.where(np.isinf(X),-np.Inf,X) )
 def minnum(X):
@@ -62,3 +79,26 @@ def binarize(X,posratio):
     values = np.zeros(len(X))
     values[argsrt[:cut]] = 1
     return values
+=======
+def nloadfile(filename):
+    z = np.load(filename+'.npz', allow_pickle=True)
+    num = int(z['a'])
+    if num == 0:
+        return z['b']
+    else:
+        return [z[chr(i+98)] for i in range(num) ]
+
+
+sdumpfile = lambda thing, filename:  sparse.save_npz(filename, thing)
+sloadfile = lambda filename:  sparse.load_npz(filename+'.npz')
+
+
+if __name__ == "__main__":
+    a = np.array([0,1,2])
+    ndumpfile(a,'adump')
+    ndumpfile([a,a],'aadump')
+    print(nloadfile('adump'))
+    print(nloadfile('aadump'))
+    sdumpfile(sparse.csr_matrix(a),'sdump')
+    print(sloadfile('sdump'))
+>>>>>>> ccde812e2aeac68d1f320df1a90508eb0a43b2a4
