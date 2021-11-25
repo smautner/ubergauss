@@ -1,10 +1,10 @@
-import random
-from scipy.special import softmax
 import numpy as np
-import multiprocessing as mp
+import structout as so
+import matplotlib.pyplot as plt
 from lmz import *
 from ubergauss.tools import cartesian_product, xmap, maxnum, binarize
 from sklearn import ensemble
+import umap
 
 '''
 We use BORE but make it nicer...
@@ -33,7 +33,7 @@ class Minimizer:
         self.model= None
 
     def infer_space(self, data):
-        self.space = [(min(data[:, i]), max(data[:, i])) for i in range(data.shape[1])]
+        return  [(min(data[:, i]), max(data[:, i])) for i in range(data.shape[1])]
 
     def init_random(self,n_init):
             pt  = [self.randomsample() for i in range(n_init)]
@@ -69,7 +69,7 @@ class Minimizer:
         X = cartesian_product(X)
         return X
 
-    def make_sample_terain(self, points_per_dim= 100):
+    def make_sample_terrain(self, points_per_dim= 100):
         '''
         get prediction for the whole space
         '''
@@ -97,22 +97,42 @@ class Minimizer:
         return samples
 
     def draw_terain_and_samples(self, samples):
+            '''
+            -> 1d
+            -> 2d
+            -> do the reduction to 2d
 
-            xylim = self.space
-            plt.figure(figsize=(9,6))
-            plt.subplot(231)
-            d2plot(np.array(self.params),self.values, title = 'sampled data', xylim = xylim)
-            plt.subplot(232)
-            d2plot(X,Y1, title = 'POS', xylim = xylim)
-            plt.subplot(233)
-            d2plot(X,Y2, title = 'NEG', xylim = xylim)
-            plt.subplot(234)
-            d2plot(X,ie, title = 'pos/neg', xylim = xylim)
-            plt.subplot(235)
-            d2plot(XNU,ieNU, title = 'sampleweight', xylim = xylim)
-            if sample:
-                plt.subplot(236)
-                d2plot(np.array(probe_here),y='r', title = 'new samples', xylim = xylim)
+            draw 1.probes pos 2.p/n 3.samples
+            '''
+
+            if len(self.space) == 1:
+                # known points
+                sa, sb = self.space[0]
+                so.iprint({p[0]:v for p,v in zip(self.params, self.values)},spacemin = sa, spacemax=sb)
+                # terrain
+                so.iprint({p[0]:v for p,v in zip(*self.sample_terain)},spacemin = sa, spacemax=sb)
+                # sampleeee
+                so.iprint({p[0]:1 for p in samples},spacemin = sa, spacemax=sb)
+                return
+
+            X = self.params
+            BG = self.sample_terain[0]
+            if len(self.space) > 2:
+                p = umap.UMAP()
+                X = p.fit_transform(X, self.values)
+                BG = p.transorm(BG)
+                samples = p.transform(samples)
+
+            # plot known points
+            xylim = self.infer_space(BG)
+            plt.figure(figsize=(9,3))
+            plt.subplot(131)
+            d2plot(X,self.values, title = 'sampled data', xylim = xylim)
+            # plot terain
+            plt.subplot(132)
+            d2plot(BG,self.sample_terain[1], title = 'terrain', xylim = xylim)
+            plt.subplot(133)
+            d2plot(X,y='r', title = 'new samples', xylim = xylim)
             plt.show()
             plt.close()
 
@@ -141,10 +161,6 @@ def get1index(clf):
     else:
         return 1
 
-import matplotlib
-matplotlib.use("module://matplotlib-sixel")
-import matplotlib.pyplot as plt
-
 def d2plot(X,y, done = False, title = None,xylim=None):
     pl=plt.scatter(X[:,0],X[:,1], c= y,s=9)
     plt.xlim(*xylim[0])
@@ -167,10 +183,14 @@ def myf(args):
 
 
 if __name__ == "__main__":
-    opti = BAY(myf,[(-100,100),(-100,100)],n_init = 10)
 
+    import matplotlib
 
-    X = get_grid(opti.space)
+    matplotlib.use("module://matplotlib-sixel")
+
+    opti = Minimizer(myf,[(-100,100),(-100,100)])
+
+    X = opti.get_grid(opti.space)
     plt.scatter(X[:,0],X[:,1], c=Map(myf, X), s=9)
     plt.show();plt.close()
 
