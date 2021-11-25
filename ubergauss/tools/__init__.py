@@ -90,6 +90,9 @@ if __name__ == "__main__":
     print(nloadfile('aadump'))
     sdumpfile(sparse.csr_matrix(a),'sdump')
     print(sloadfile('sdump'))
+
+
+
 def binarize(X,posratio):
     '''
     lowest posratio -> 1 ;; rest 0
