@@ -90,8 +90,8 @@ class BAY:
         values[argsrt[:cut]] = 1
 
         #tools.binarize(self.values,.25) -> i  should be using this :)
-        vinf = (values+1)%2
         fpos.fit(param, values)
+        #vinf = (values+1)%2
         #fneg.fit(param, vinf)
 
 

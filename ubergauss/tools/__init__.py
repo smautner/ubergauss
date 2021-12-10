@@ -63,13 +63,9 @@ def ndumpfile(thing,filename):
     else:
         np.savez_compressed(filename,a=0,b=thing)
 
-def maxnum(X):
-    return np.nanmax( np.where(np.isinf(X),-np.Inf,X) )
-def minnum(X):
-    return np.nanmin( np.where(np.isinf(X),np.Inf,X) )
-
-
 def nloadfile(filename):
+    if filename[-4]!= '.':
+        filename += '.npz'
     z = np.load(filename+'.npz', allow_pickle=True)
     num = int(z['a'])
     if num == 0:
