@@ -65,8 +65,14 @@ def ndumpfile(thing,filename):
 
 def nloadfile(filename):
     if filename[-4]!= '.':
+        print('adding .npz to filename')
         filename += '.npz'
-    z = np.load(filename+'.npz', allow_pickle=True)
+
+    if filename.endswith('.npy'):
+        return np.load(filename)
+
+    # load .npz
+    z = np.load(filename, allow_pickle=True)
     num = int(z['a'])
     if num == 0:
         return z['b']
