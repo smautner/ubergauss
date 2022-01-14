@@ -24,6 +24,8 @@ def spearman(x,y):
 def zehidense(X):
     if sparse.issparse(X):
         return X.todense()
+    if type(X) == np.matrix:
+        X = X.A
     return X
 
 def cartesian_product(arrays):
@@ -37,12 +39,13 @@ def cartesian_product(arrays):
 
 
 def np_bool_select(numpi, bools):
-    return np.array([x for x,y in zip(numpi,bools) if y  ])
+    return np.array([x for x,y in zip(zehidense(numpi),bools) if y  ])
 
 
 
 def maxnum(X):
     return np.nanmax( np.where(np.isinf(X),-np.Inf,X) )
+
 def minnum(X):
     return np.nanmin( np.where(np.isinf(X),np.Inf,X) )
 
