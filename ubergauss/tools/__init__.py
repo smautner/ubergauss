@@ -107,3 +107,14 @@ def binarize(X,posratio):
     values = np.zeros(len(X))
     values[argsrt[:cut]] = 1
     return values
+
+
+
+class spacemap():
+    # mapping items to integers...
+    def __init__(self, items):
+        self.itemlist = items
+        self.integerlist = list(range(len(items)))
+        self.len = len(items)
+        self.getitem = { i:k for i,k in enumerate(items)}
+        self.getint = { k:i for i,k in enumerate(items)}
