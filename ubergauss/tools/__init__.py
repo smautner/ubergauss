@@ -106,7 +106,6 @@ def binarize(X,posratio):
         cut = max(int(len(X)*posratio),1)
     elif len(X) > posratio:
         cut = -posratio-1
-        print(f"PRENIS")
     else:
         assert False ,'we ducked up'
 
