@@ -97,16 +97,23 @@ if __name__ == "__main__":
     print(sloadfile('sdump'))
 
 
-
 def binarize(X,posratio):
     '''
     lowest posratio -> 1 ;; rest 0
     '''
     argsrt = np.argsort(X)
-    cut = max(int(len(X)*posratio),1)
+    if 0< posratio < 1:
+        cut = max(int(len(X)*posratio),1)
+    elif len(X) > posratio:
+        cut = -posratio-1
+        print(f"PRENIS")
+    else:
+        assert False ,'we ducked up'
+
     values = np.zeros(len(X))
     values[argsrt[:cut]] = 1
     return values
+
 
 
 
