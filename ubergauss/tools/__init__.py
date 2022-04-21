@@ -50,7 +50,6 @@ def minnum(X):
     return np.nanmin( np.where(np.isinf(X),np.Inf,X) )
 
 
-
 dumpfile = lambda thing, filename: dill.dump(thing, open(filename, "wb"))
 loadfile = lambda filename: dill.load(open(filename, "rb"))
 
@@ -87,34 +86,6 @@ sdumpfile = lambda thing, filename:  sparse.save_npz(filename, thing)
 sloadfile = lambda filename:  sparse.load_npz(filename+'.npz')
 
 
-if __name__ == "__main__":
-    a = np.array([0,1,2])
-    ndumpfile(a,'adump')
-    ndumpfile([a,a],'aadump')
-    print(nloadfile('adump'))
-    print(nloadfile('aadump'))
-    sdumpfile(sparse.csr_matrix(a),'sdump')
-    print(sloadfile('sdump'))
-
-
-def binarize(X,posratio):
-    '''
-    lowest posratio -> 1 ;; rest 0
-    '''
-    argsrt = np.argsort(X)
-    if 0< posratio < 1:
-        cut = max(int(len(X)*posratio),1)
-    elif len(X) > posratio:
-        cut = -posratio-1
-    else:
-        assert False ,'we ducked up'
-
-    values = np.zeros(len(X))
-    values[argsrt[:cut]] = 1
-    return values
-
-
-
 
 class spacemap():
     # mapping items to integers...
@@ -124,3 +95,34 @@ class spacemap():
         self.len = len(items)
         self.getitem = { i:k for i,k in enumerate(items)}
         self.getint = { k:i for i,k in enumerate(items)}
+
+def binarize(X,posratio):
+    '''
+    lowest posratio -> 1 ;; rest 0
+    '''
+    argsrt = np.argsort(X)
+    if 0< posratio < 1:
+        cut = max(int(len(X)*(1-posratio)),1)
+    elif len(X) > posratio:
+        cut = len(X) - posratio
+    else:
+        assert False
+
+    values = np.ones(len(X), dtype = np.int32)
+    values[argsrt[:cut]] = 0
+    return values
+
+
+
+if __name__ == "__main__":
+    a = np.array([0,1,2])
+    ndumpfile(a,'adump')
+    ndumpfile([a,a],'aadump')
+    print(nloadfile('adump'))
+    print(nloadfile('aadump'))
+    sdumpfile(sparse.csr_matrix(a),'sdump')
+    print(sloadfile('sdump'))
+
+    a = np.random.rand(6)
+    print(a)
+    print(binarize(a,2))
