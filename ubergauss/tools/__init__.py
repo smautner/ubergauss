@@ -110,7 +110,7 @@ def binarize(X,posratio):
     elif len(X) > posratio:
         cut = len(X) - posratio
     else:
-        assert False
+        assert False, f'{0<posratio<1= }  {len(X)>posratio= }'
 
     values = np.ones(len(X), dtype = np.int32)
     values[argsrt[:cut]] = 0
