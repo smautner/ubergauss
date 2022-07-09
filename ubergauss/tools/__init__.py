@@ -89,12 +89,16 @@ sloadfile = lambda filename:  sparse.load_npz(filename+'.npz')
 
 class spacemap():
     # mapping items to integers...
-    def __init__(self, items):
-        self.itemlist = items
-        self.integerlist = list(range(len(items)))
-        self.len = len(items)
-        self.getitem = { i:k for i,k in enumerate(items)}
-        self.getint = { k:i for i,k in enumerate(items)}
+    def __init__(self, uniqueitems):
+        self.itemlist = uniqueitems
+        self.integerlist = list(range(len(uniqueitems)))
+        self.len = len(uniqueitems)
+        self.getitem = {i:k for i,k in enumerate(uniqueitems)}
+        self.getint = {k:i for i,k in enumerate(uniqueitems)}
+
+def labelsToIntList(items):
+    sm = spacemap(np.unique(items))
+    return [sm.getint[i] for i in items], sm
 
 def binarize(X,posratio):
     '''

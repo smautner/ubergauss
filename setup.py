@@ -100,7 +100,6 @@ setup(
     author_email='myl4stn4m3stef@gmail.com',
     packages=[packname,'ubergauss.optimization','ubergauss.tools'],
     python_requires='>=3.8',
-    scripts=[ ],
     include_package_data=True,
     package_data={},
     url='https://github.com/smautner/ubergauss',
