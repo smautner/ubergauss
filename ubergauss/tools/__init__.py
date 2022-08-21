@@ -1,3 +1,5 @@
+from lmz import Map,Zip,Filter,Grouper,Range,Transpose
+
 from multiprocessing import Pool
 _func = None
 def worker_init(func):
@@ -8,6 +10,7 @@ def worker(x):
 def xmap(func, iterable, processes=None, tasksperchild = 1):
   with Pool(processes, initializer=worker_init, initargs=(func,),maxtasksperchild = tasksperchild) as p:
     return p.map(worker, iterable)
+
 
 import numpy as np
 from scipy.stats import spearmanr
@@ -95,6 +98,14 @@ class spacemap():
         self.len = len(uniqueitems)
         self.getitem = {i:k for i,k in enumerate(uniqueitems)}
         self.getint = {k:i for i,k in enumerate(uniqueitems)}
+
+    def encode(self, stuff, fallback = False):
+        return [self.getint.get(x, fallback or x) for x in stuff]
+
+
+    def decode(self, stuff,fallback = False):
+        return [self.getitem.get(x,fallback or -1) for x in stuff]
+
 
 def labelsToIntList(items):
     sm = spacemap(np.unique(items))
