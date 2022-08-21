@@ -7,8 +7,8 @@ def worker_init(func):
   _func = func
 def worker(x):
   return _func(x)
-def xmap(func, iterable, processes=None, tasksperchild = 1):
-  with Pool(processes, initializer=worker_init, initargs=(func,),maxtasksperchild = tasksperchild) as p:
+def xmap(func, iterable, n_jobs=None, tasksperchild = 1):
+  with Pool(n_jobs, initializer=worker_init, initargs=(func,),maxtasksperchild = tasksperchild) as p:
     return p.map(worker, iterable)
 
 
