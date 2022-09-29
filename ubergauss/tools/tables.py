@@ -11,6 +11,9 @@ def totab(dlist):
 
 
 def touniquetab(tab):
+    '''
+    returns: keys, truncated table
+    '''
     tab,k = totab(tab)
 
     ttab = Transpose(tab)
