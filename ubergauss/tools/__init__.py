@@ -115,13 +115,14 @@ def binarize(X,posratio):
     '''
     lowest posratio -> 1 ;; rest 0
     '''
+
     argsrt = np.argsort(X)
     if 0< posratio < 1:
         cut = max(int(len(X)*(1-posratio)),1)
-    elif len(X) > posratio:
+    elif len(X) > posratio and isinstance(posratio,int):
         cut = len(X) - posratio
     else:
-        assert False, f'{0<posratio<1= }  {len(X)>posratio= }'
+        assert False, f'{0<posratio<1= }  {len(X)>posratio= } {posratio=}'
 
     values = np.ones(len(X), dtype = np.int32)
     values[argsrt[:cut]] = 0
