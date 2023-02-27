@@ -1,7 +1,4 @@
-
 # tools for hyperopt
-
-
 import pandas as pd
 import numpy as np
 from hyperopt.pyll import scope
@@ -14,7 +11,7 @@ def trial2df(trials):
     res  = np.array([trial['result']['loss'] for trial in trials])
 
     # variables that we optimized
-    keys = trials[0]['misc']['vals'].keys()
+    keys = trials._trials[0]['misc']['vals'].keys()
     def get_param_list(d):
         return [d[kk][0] for kk in keys]
 
