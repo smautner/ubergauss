@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from hyperopt.pyll import scope
 from hyperopt import fmin, tpe, hp, Trials
-
+import ubergauss.tools as ug
 
 def trial2df(trials):
 
@@ -43,21 +43,32 @@ from hyperopt import  trials_from_docs
 
 
 def run(x , f= None, trials = None, space = None, max_evals = None):
-    if trials = None:
+    if trials == None:
         trials = Trials()
-    fn=lambda y: f(x=x, **y),
+
+    fn=lambda y: f(x=x, **y)
+
     best = fmin(fn,
                 algo=tpe.suggest,
                 trials = trials,
                 space = space,
-                max_evals=1)
+                max_evals=max_evals)
     return trials
 
-def fffmin(fun, items=[0], probing_parallel = 2, probing_trials = 10, after_evals = 10, space= None):
-    eva = lambda x: run( x, f = fun,space=space, max_evals = probing_trials)
+def concattrials(trials):
+    trialdicts = [d  for a in trials for d in a._trials]
+    return trials_from_docs(trialdicts)
+
+def fffmin(fun, items=[0], probing_parallel = 2, probing_evals = 10, after_evals = 10, space= None):
+    eva = lambda x: run( x, f = fun,space=space, max_evals = probing_evals)
     trialslist = ug.xmap(eva, items*probing_parallel)
-    merged_trials = [trials_from_docs(trialslist[i::len(items)]) for i in items]
+    print(f"first round fin")
+    print(trialslist)
+    merged_trials = [concattrials(trialslist[i::len(items)]) for i in items]
     eva = lambda x: run(x[0],trials = x[1], f = fun,space=space, max_evals = after_evals)
+    print(f"start second round")
     trialslist = ug.xmap(eva, zip(items, merged_trials))
+    return trialslist
+
 
 

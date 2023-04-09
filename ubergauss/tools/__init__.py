@@ -115,14 +115,13 @@ def binarize(X,posratio):
     '''
     lowest posratio -> 1 ;; rest 0
     '''
-
     argsrt = np.argsort(X)
     if 0< posratio < 1:
         cut = max(int(len(X)*(1-posratio)),1)
     elif len(X) > posratio and isinstance(posratio,int):
         cut = len(X) - posratio
     else:
-        assert False, f'{0<posratio<1= }  {len(X)>posratio= } {posratio=}'
+        assert False, f'{0<posratio<1= }  {len(X)>posratio= } {posratio=} {len(X)=}'
 
     values = np.ones(len(X), dtype = np.int32)
     values[argsrt[:cut]] = 0
@@ -142,3 +141,45 @@ if __name__ == "__main__":
     a = np.random.rand(6)
     print(a)
     print(binarize(a,2))
+
+
+
+
+
+def stack_arrays(arrays, axis=0):
+    """
+    Stack numpy arrays and sparse scipy arrays horizontally and vertically.
+
+    Args:
+        arrays: list of numpy arrays and/or sparse scipy arrays
+            The input arrays to stack.
+        axis: int, optional (default=0)
+            The axis along which to stack the arrays. If 0, the arrays are stacked vertically.
+            If 1, the arrays are stacked horizontally.
+
+    Returns:
+        numpy array or sparse scipy array
+            The stacked array.
+    """
+    assert axis in [0, 1],"Invalid axis value. Must be 0 or 1."
+    assert isinstance(arrays, list), "Input must be a list of arrays."
+    assert len(arrays) > 0, "Input list must not be empty."
+
+    # Determine the data type of the input arrays
+    if  sparse.issparse(arrays[0]):
+        # If all arrays are sparse, use scipy.sparse.vstack or scipy.sparse.hstack
+        if axis == 0:
+            return sparse.vstack(arrays)
+        else:
+            return sparse.hstack(arrays)
+    else:
+        # If there is at least one numpy array, use numpy.vstack or numpy.hstack
+        if axis == 0:
+            return np.vstack(arrays)
+        else:
+            return np.hstack(arrays)
+
+def hstack(arrays):
+    return stack_arrays(arrays, axis = 1)
+def vstack(arrays):
+    return stack_arrays(arrays, axis = 0)
