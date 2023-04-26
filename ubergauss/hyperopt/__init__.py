@@ -65,7 +65,7 @@ def fffmin(fun, items=[0], probing_parallel = 2, probing_evals = 10, after_evals
     print(f"first round fin")
     print(trialslist)
     merged_trials = [concattrials(trialslist[i::len(items)]) for i in items]
-    eva = lambda x: run(x[0],trials = x[1], f = fun,space=space, max_evals = after_evals)
+    eva = lambda x: run(x[0],trials = x[1], f = fun,space=space, max_evals = probing_parallel*probing_evals+ after_evals)
     print(f"start second round")
     trialslist = ug.xmap(eva, zip(items, merged_trials))
     return trialslist
