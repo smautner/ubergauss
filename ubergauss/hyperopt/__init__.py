@@ -4,6 +4,7 @@ import numpy as np
 from hyperopt.pyll import scope
 from hyperopt import fmin, tpe, hp, Trials
 import ubergauss.tools as ug
+import hyperopt.rand as hyrand
 
 def trial2df(trials):
 
@@ -42,14 +43,14 @@ class spaceship():
 from hyperopt import  trials_from_docs
 
 
-def run(x , f= None, trials = None, space = None, max_evals = None):
+def run(x , f= None, trials = None, space = None, max_evals = None, algo = tpe.suggest):
     if trials == None:
         trials = Trials()
 
     fn=lambda y: f(x=x, **y)
 
     best = fmin(fn,
-                algo=tpe.suggest,
+                algo=algo,
                 trials = trials,
                 space = space,
                 max_evals=max_evals)
@@ -71,4 +72,20 @@ def fffmin(fun, items=[0], probing_parallel = 2, probing_evals = 10, after_evals
     return trialslist
 
 
+def fffmin2(fun,fun2, probing_parallel = 2, probing_evals = 10, after_evals = 10, space= None):
+    # ffmin2 optimizes many targets at open
+    # here we just have one target... so we parallelize in the beginnig to have many seeds...
+    # then we merge and optimize...  :)
+    eva = lambda x: run( None, f = fun,space=space, max_evals = probing_evals, algo = hyrand.suggest)
+    trialslist = ug.xmap(eva, range(probing_parallel))
+    print(f"first round fin")
+    # print(trialslist)
+    merged_trials = concattrials(trialslist)
 
+    print(f"start second round")
+    fmin(fun2,
+          algo=tpe.suggest,
+                trials = merged_trials,
+                space = space,
+                max_evals=probing_parallel*probing_evals+after_evals)
+    return trialslist
