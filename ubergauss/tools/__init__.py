@@ -1,4 +1,5 @@
 from lmz import Map,Zip,Filter,Grouper,Range,Transpose
+import os
 
 from multiprocessing import Pool
 _func = None
@@ -53,14 +54,20 @@ def minnum(X):
     return np.nanmin( np.where(np.isinf(X),np.Inf,X) )
 
 
-dumpfile = lambda thing, filename: dill.dump(thing, open(filename, "wb"))
-loadfile = lambda filename: dill.load(open(filename, "rb"))
+def fixpath(path):
+    if path[0]  == f'~':
+        return  os.environ[f'HOME'] + path[1:]
+    return path
 
-jdumpfile = lambda thing, filename:  open(filename,'w').write(json.dumps(thing))
-jloadfile = lambda filename:  json.loads(open(filename,'r').read())
+dumpfile = lambda thing, filename: dill.dump(thing, open(fixpath(filename), "wb"))
+loadfile = lambda filename: dill.load(open(fixpath(filename), "rb"))
+
+jdumpfile = lambda thing, filename:  open(fixpath(filename),'w').write(json.dumps(thing))
+jloadfile = lambda filename:  json.loads(open(fixpath(filename)  ,'r').read())
 
 
 def ndumpfile(thing,filename):
+    filename = fixpath(filename)
     if type(thing) == list:
         d= { chr(i+98):e  for i,e in enumerate(thing)}
         d['a'] = len(thing)
@@ -69,6 +76,7 @@ def ndumpfile(thing,filename):
         np.savez_compressed(filename,a=0,b=thing)
 
 def nloadfile(filename):
+    filename = fixpath(filename)
     if filename[-4]!= '.':
         print('adding .npz to filename')
         filename += '.npz'
@@ -85,8 +93,8 @@ def nloadfile(filename):
         return [z[chr(i+98)] for i in range(num) ]
 
 
-sdumpfile = lambda thing, filename:  sparse.save_npz(filename, thing)
-sloadfile = lambda filename:  sparse.load_npz(filename+'.npz')
+sdumpfile = lambda thing, filename:  sparse.save_npz(fixpath(filename), thing)
+sloadfile = lambda filename:  sparse.load_npz(fixpath(filename)+'.npz')
 
 
 
