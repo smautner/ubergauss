@@ -77,10 +77,13 @@ def fffmin2(fun,fun2, probing_parallel = 2, probing_evals = 10, after_evals = 10
     # here we just have one target... so we parallelize in the beginnig to have many seeds...
     # then we merge and optimize...  :)
     eva = lambda x: run( None, f = fun,space=space, max_evals = probing_evals, algo = hyrand.suggest)
-    trialslist = ug.xmap(eva, range(probing_parallel))
-    print(f"first round fin")
-    # print(trialslist)
-    merged_trials = concattrials(trialslist)
+
+    if not probing_evals:
+            merged_trials = Trials()
+    else:
+        trialslist = ug.xmap(eva, range(probing_parallel))
+        print(f"first round fin")
+        merged_trials = concattrials(trialslist)
 
     print(f"start second round")
     fmin(fun2,
@@ -88,4 +91,4 @@ def fffmin2(fun,fun2, probing_parallel = 2, probing_evals = 10, after_evals = 10
                 trials = merged_trials,
                 space = space,
                 max_evals=probing_parallel*probing_evals+after_evals)
-    return trialslist
+    return merged_trials
