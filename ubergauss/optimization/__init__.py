@@ -4,7 +4,7 @@ from ubergauss import tools as ut
 
 
 def maketasks(dict_):
-    return (dict_(zip(dict_.keys(), values)) for values in product(*dict_.values()))
+    return (dict(zip(dict_.keys(), values)) for values in product(*dict_.values()))
 
 
 def gridsearch(func, dict_,data, score = 'score', df = True):
