@@ -4,7 +4,7 @@ from ubergauss import tools as ut
 
 
 def maketasks(dict_):
-    return (dict(zip(dict_.keys(), values)) for values in product(*dict_.values()))
+    return [dict(zip(dict_.keys(), values)) for values in product(*dict_.values())]
 
 
 def gridsearch(func, dict_,data, score = 'score', df = True):
@@ -15,8 +15,7 @@ def gridsearch(func, dict_,data, score = 'score', df = True):
     res = ut.xmap(func2, tasks)
 
     for t,r in zip(tasks, res):
-        r[score] = r
-
+        t[score] = r
     if df:
         return pd.DataFrame(tasks)
     return tasks
