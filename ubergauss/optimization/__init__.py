@@ -1,18 +1,18 @@
-
-
 import pandas as pd
 from itertools import product
 from ubergauss import tools as ut
 
 
-def maketasks(dict):
-    return (dict(zip(dict.keys(), values)) for values in product(*dict.values()))
+def maketasks(dict_):
+    return (dict_(zip(dict_.keys(), values)) for values in product(*dict_.values()))
 
 
-def gridsearch(func, dict, score = 'score', df = True):
+def gridsearch(func, dict_,data, score = 'score', df = True):
 
-    tasks = maketasks(dict)
-    res = ut.xmap(func, tasks)
+    tasks = maketasks(dict_)
+
+    func2 = lambda t: func(*data,**t)
+    res = ut.xmap(func2, tasks)
 
     for t,r in zip(tasks, res):
         r[score] = r
