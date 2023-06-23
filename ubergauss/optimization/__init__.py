@@ -17,5 +17,7 @@ def gridsearch(func, dict_,data, score = 'score', df = True):
     for t,r in zip(tasks, res):
         t[score] = r
     if df:
-        return pd.DataFrame(tasks)
+        r= pd.DataFrame(tasks)
+        r.dropna(thresh=2, axis=1)
+        return r
     return tasks
