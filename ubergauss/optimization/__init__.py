@@ -3,13 +3,13 @@ from itertools import product
 from ubergauss import tools as ut
 
 
-def maketasks(dict_):
-    return [dict(zip(dict_.keys(), values)) for values in product(*dict_.values())]
+def maketasks(param_dict):
+    return [dict(zip(param_dict.keys(), values)) for values in product(*param_dict.values())]
 
 
-def gridsearch(func, dict_,data, score = 'score', df = True):
+def gridsearch(func, param_dict, data, score = 'score', df = True):
 
-    tasks = maketasks(dict_)
+    tasks = maketasks(param_dict)
 
     func2 = lambda t: func(*data,**t)
     res = ut.xmap(func2, tasks)
@@ -21,3 +21,12 @@ def gridsearch(func, dict_,data, score = 'score', df = True):
         r.dropna(thresh=2, axis=1)
         return r
     return tasks
+
+def print(grid_df, score='score', showall=True):
+    grid_df = grid_df.sort_values(by = score)
+
+    if showall:
+        with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+            print (grid_df)
+    else:
+        print(grid_df)
