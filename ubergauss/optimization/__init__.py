@@ -10,23 +10,33 @@ def maketasks(param_dict):
     return [dict(zip(param_dict.keys(), values)) for values in product(*param_dict.values())]
 
 
-def gridsearch(func, param_dict, data, score = 'score', df = True):
+import time
+def gridsearch(func, param_dict, data, score = 'score', df = True,timevar=f'time'):
 
     tasks = maketasks(param_dict)
 
-    func2 = lambda t: func(*data,**t)
+    def func2(t):
+        start = time.time()
+        res = func(*data,**t)
+        return res, time.time()-start
+
     res = ut.xmap(func2, tasks)
 
-    for t,r in zip(tasks, res):
+    for t,(r,sek) in zip(tasks, res):
         t[score] = r
+        t[timevar] = sek
     if df:
         r= pd.DataFrame(tasks)
         r.dropna(thresh=2, axis=1)
         return r
     return tasks
 
-def print(grid_df, score='score', showall=True):
+def dfprint(grid_df: pd.DataFrame, score:str ='score', showall:bool =True):
     grid_df = grid_df.sort_values(by = score)
+
+    unique = grid_df.nunique(dropna=False)
+    # grid_df = grid_df[unique == 1]
+    grid_df = grid_df.loc[:,unique!=1]
 
     if showall:
         with pd.option_context('display.max_rows', None, 'display.max_columns', None):
@@ -34,6 +44,9 @@ def print(grid_df, score='score', showall=True):
     else:
         print(grid_df)
 
+    if sum(unique!=1) > 0:
+        print(f'\n\nremoved column(s) that had only 1 value:')
+        print(f'{unique[unique==1]}')
 
 
 def contains(iter, element):
