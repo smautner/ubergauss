@@ -27,7 +27,7 @@ def spearman(x,y):
 
 def zehidense(X):
     if sparse.issparse(X):
-        return X.todense()
+        X =  X.todense()
     if type(X) == np.matrix:
         X = X.A
     return X

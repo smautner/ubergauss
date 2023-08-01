@@ -14,7 +14,6 @@ import time
 def gridsearch(func, param_dict, data, score = 'score', df = True,timevar=f'time'):
 
     tasks = maketasks(param_dict)
-
     def func2(t):
         start = time.time()
         res = func(*data,**t)
