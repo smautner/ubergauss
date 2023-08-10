@@ -48,6 +48,24 @@ def dfprint(grid_df: pd.DataFrame, score:str ='score', showall:bool =True):
         print(f'{unique[unique==1]}')
 
 
+def test_grid_optimizer():
+    from sklearn.datasets import make_classification
+    from sklearn.cluster import KMeans
+    from sklearn.metrics import adjusted_rand_score as ari
+
+    data = make_classification()
+    grid = {'n_clusters': [2,3,4]}
+    def run(X,y,**params):
+        clf = KMeans(**params)
+        yh = clf.fit_predict(X)
+        return ari(y,yh)
+    df = gridsearch(run, grid, data)
+    # print(df.corr(method=f'spearman'))
+    dfprint(df)
+
+
+
+
 def contains(iter, element):
     for e in iter:
         if e == element:
