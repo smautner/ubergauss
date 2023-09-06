@@ -8,10 +8,22 @@ def worker_init(func):
   _func = func
 def worker(x):
   return _func(x)
-def xmap(func, iterable, n_jobs=None, tasksperchild = 1):
+
+from functools import partial
+
+def xmap(func, iterable, n_jobs=None, tasksperchild = 1, **kwargs):
+  func = partial(func, **kwargs)
   with Pool(n_jobs, initializer=worker_init, initargs=(func,),maxtasksperchild = tasksperchild) as p:
     return p.map(worker, iterable)
 
+
+def test_xmap():
+    def f(x,y=0):
+        return x+y
+    assert xmap(f,[1,1,2], y= 3) == [4,4,5]
+    def f(x):
+        return x+3
+    assert xmap(f,[1,1,2]) == [4,4,5]
 
 import numpy as np
 from scipy.stats import spearmanr
