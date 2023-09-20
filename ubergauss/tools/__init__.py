@@ -203,3 +203,13 @@ def hstack(arrays):
     return stack_arrays(arrays, axis = 1)
 def vstack(arrays):
     return stack_arrays(arrays, axis = 0)
+
+
+
+def cache(fname, makedata):
+    if os.path.isfile(fname):
+        return loadfile(fname)
+    else:
+        data = makedata()
+        dumpfile(data,fname)
+        return data
