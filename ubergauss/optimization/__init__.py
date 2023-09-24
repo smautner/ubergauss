@@ -73,8 +73,10 @@ def contains(iter, element):
     return False
 
 class groupedCV(BaseCrossValidator):
-    def __init__(self, n_splits):
+    def __init__(self, n_splits, randseed=None):
         self.n_splits = n_splits
+        self.randomseed = randseed
+
     def get_n_splits(self, X= None, y= None, groups = None):
         return self.n_splits
 
@@ -87,6 +89,7 @@ class groupedCV(BaseCrossValidator):
     def _iter_test_indices(self, X,y,groups):
         groups = np.array(groups)
         z = np.unique(groups)
+        np.random.seed(seed = self.randomseed)
         np.random.shuffle(z)
         if self.n_splits > 1:
             for testgroups in np.array_split(z, self.n_splits):
