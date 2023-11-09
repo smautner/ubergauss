@@ -14,12 +14,23 @@ import time
 def gridsearch(func, param_dict, data, score = 'score', df = True,timevar=f'time'):
 
     tasks = maketasks(param_dict)
+
     def func2(t):
         start = time.time()
-        res = func(*data,**t)
+        try:
+            res = func(*data,**t)
+        except Exception as e:
+            print(f"EXCEPTION:")
+            print(e)
+            print(f"PARAMS:")
+            print(t)
+            print(f"EXCEPTION END")
+            exit()
+
         return res, time.time()-start
 
     res = ut.xmap(func2, tasks)
+    # res = list(map(func2, tasks))
 
     for t,(r,sek) in zip(tasks, res):
         t[score] = r
