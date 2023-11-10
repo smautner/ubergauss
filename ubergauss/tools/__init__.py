@@ -1,7 +1,7 @@
 from lmz import Map,Zip,Filter,Grouper,Range,Transpose
 import os
 
-from multiprocessing import Pool
+from multiprocessing import Pool, current_process
 _func = None
 def worker_init(func):
   global _func
@@ -15,6 +15,13 @@ def xmap(func, iterable, n_jobs=None, tasksperchild = 1, **kwargs):
   func = partial(func, **kwargs)
   with Pool(n_jobs, initializer=worker_init, initargs=(func,),maxtasksperchild = tasksperchild) as p:
     return p.map(worker, iterable)
+
+
+def xxmap(func, iterable, n_jobs=None, tasksperchild = 1, **kwargs):
+    '''if in a subprocess we do sequencial map else do distributed map'''
+    if current_process().name == 'MainProcess':
+        return xmap(func, iterable, n_jobs=n_jobs, tasksperchild = tasksperchild, **kwargs)
+    return Map(func,iterable,**kwargs)
 
 
 def test_xmap():
