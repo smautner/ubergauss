@@ -19,8 +19,10 @@ def xmap(func, iterable, n_jobs=None, tasksperchild = 1, **kwargs):
 
 def xxmap(func, iterable, n_jobs=None, tasksperchild = 1, **kwargs):
     '''if in a subprocess we do sequencial map else do distributed map'''
-    if current_process().name == 'MainProcess':
+
+    if current_process().name == 'MainProcess' and n_jobs != 1:
         return xmap(func, iterable, n_jobs=n_jobs, tasksperchild = tasksperchild, **kwargs)
+
     return Map(func,iterable,**kwargs)
 
 
