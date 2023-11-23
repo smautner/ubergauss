@@ -41,12 +41,17 @@ def gridsearch(func, param_dict, data, score = 'score', df = True,timevar=f'time
         return r
     return tasks
 
-def dfprint(grid_df: pd.DataFrame, score:str ='score', showall:bool =True):
-    grid_df = grid_df.sort_values(by = score)
-
+def df_remove_duplicates(grid_df, return_unique=False):
     unique = grid_df.nunique(dropna=False)
-    # grid_df = grid_df[unique == 1]
     grid_df = grid_df.loc[:,unique!=1]
+    if return_unique:
+        return grid_df, unique
+    return grid_df
+
+def dfprint(grid_df: pd.DataFrame, score:str ='score', showall:bool =True):
+
+    grid_df = grid_df.sort_values(by = score)
+    grid_df, unique = df_remove_duplicates(grid_df, return_unique = True)
 
     if showall:
         with pd.option_context('display.max_rows', None, 'display.max_columns', None):
