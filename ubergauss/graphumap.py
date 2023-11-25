@@ -1,6 +1,8 @@
 import numpy as np
 import umap
 
+from warnings import simplefilter
+simplefilter(action='ignore', category=UserWarning)
 
 def count_non_zeros_per_row(csr_matrix):
     non_zero_counts = []
