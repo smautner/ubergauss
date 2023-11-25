@@ -29,7 +29,7 @@ def gridsearch(func, param_dict, data, score = 'score', df = True,timevar=f'time
 
         return res, time.time()-start
 
-    res = ut.xmap(func2, tasks)
+    res = ut.xxmap(func2, tasks)
     # res = list(map(func2, tasks))
 
     for t,(r,sek) in zip(tasks, res):

@@ -11,10 +11,20 @@ def worker(x):
 
 from functools import partial
 
+import tqdm
+
+# def xmap(func, iterable, n_jobs=None, tasksperchild = 1, **kwargs):
+#   func = partial(func, **kwargs)
+#   with Pool(n_jobs, initializer=worker_init, initargs=(func,),maxtasksperchild = tasksperchild) as p:
+#     return p.map(worker, iterable)
+
 def xmap(func, iterable, n_jobs=None, tasksperchild = 1, **kwargs):
-  func = partial(func, **kwargs)
-  with Pool(n_jobs, initializer=worker_init, initargs=(func,),maxtasksperchild = tasksperchild) as p:
-    return p.map(worker, iterable)
+    func = partial(func, **kwargs)
+    result_list_tqdm = []
+    with Pool(n_jobs, initializer=worker_init, initargs=(func,),maxtasksperchild = tasksperchild) as p:
+        for result in tqdm.tqdm(p.imap(worker, iterable), total=len(iterable)):
+            result_list_tqdm.append(result)
+    return result_list_tqdm
 
 
 def xxmap(func, iterable, n_jobs=None, tasksperchild = 1, **kwargs):
