@@ -33,7 +33,11 @@ def gridsearch(func, param_dict, data, score = 'score', df = True,timevar=f'time
     # res = list(map(func2, tasks))
 
     for t,(r,sek) in zip(tasks, res):
-        t[score] = r
+        if type(r) != dict:
+            t[score] = r
+        else:
+            t.update(r)
+
         t[timevar] = sek
     if df:
         r= pd.DataFrame(tasks)
@@ -50,7 +54,9 @@ def df_remove_duplicates(grid_df, return_unique=False):
 
 def dfprint(grid_df: pd.DataFrame, score:str ='score', showall:bool =True):
 
-    grid_df = grid_df.sort_values(by = score)
+    if score in grid_df:
+        grid_df = grid_df.sort_values(by = score)
+
     grid_df, unique = df_remove_duplicates(grid_df, return_unique = True)
 
     if showall:
