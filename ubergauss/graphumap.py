@@ -12,20 +12,25 @@ def count_non_zeros_per_row(csr_matrix):
         non_zero_counts.append(end_index - start_index)
     return non_zero_counts
 
-def graphumap(csr_matrix, n_dim = 2):
+def graphumap(adjacency_matrix, n_dim = 2):
     '''
     csr_matrix is the distance matrix of the graph
     '''
     # initialize matrices
-    maxneigh = max(count_non_zeros_per_row(csr_matrix))
-    newshape = (csr_matrix.shape[0], maxneigh)
+    maxneigh = max(count_non_zeros_per_row(adjacency_matrix))
+    newshape = (adjacency_matrix.shape[0], maxneigh)
     index = np.full(newshape,-1)
     dist = np.full(newshape,np.inf)
 
-    for i, row in enumerate(csr_matrix):
+    for i, row in enumerate(adjacency_matrix):
         order = np.argsort(row.data)
         index[i,:len(order)] = row.indices[order]
         dist[i,:len(order)] = row.data[order]
 
     myknn = (index, dist, None)
-    return umap.UMAP(n_neighbors = index.shape[1], n_components=n_dim, metric='precomputed', precomputed_knn= myknn).fit_transform(csr_matrix)
+
+    # import structout as so
+    # so.heatmap(index)
+    # so.heatmap(dist)
+
+    return umap.UMAP(n_neighbors = index.shape[1], n_components=n_dim, metric='precomputed', precomputed_knn= myknn).fit_transform(adjacency_matrix)
