@@ -25,20 +25,20 @@ def gridsearch(func, param_dict, data, score = 'score', df = True,timevar=f'time
             print(f"PARAMS:")
             print(t)
             print(f"EXCEPTION END")
-            exit()
-
+            res = None
         return res, time.time()-start
 
     res = ut.xxmap(func2, tasks)
     # res = list(map(func2, tasks))
-
-    for t,(r,sek) in zip(tasks, res):
+    t_r = filter(lambda r: r[1][0] is not None,zip(tasks,res))
+    # for t,(r,sek) in zip(tasks, res):
+    for t,(r,sek) in t_r:
         if type(r) != dict:
             t[score] = r
         else:
             t.update(r)
-
         t[timevar] = sek
+
     if df:
         r= pd.DataFrame(tasks)
         r.dropna(thresh=2, axis=1)
