@@ -11,9 +11,10 @@ def maketasks(param_dict):
 
 
 import time
-def gridsearch(func, param_dict, data, score = 'score', df = True,timevar=f'time'):
+def gridsearch(func, param_dict = False, tasks = False, data = None, score = 'score', df = True,timevar=f'time'):
 
-    tasks = maketasks(param_dict)
+    if not tasks:
+        tasks = maketasks(param_dict)
 
     def func2(t):
         start = time.time()
@@ -68,6 +69,12 @@ def dfprint(grid_df: pd.DataFrame, score:str ='score', showall:bool =True):
     if sum(unique!=1) > 0:
         print(f'\n\nremoved column(s) that had only 1 value:')
         print(f'{unique[unique==1]}')
+
+
+def get_best(df, column= 'score'):
+    max_index = df[column].idxmax()
+    max_row = df.loc[max_index].to_dict()
+    print(max_row)
 
 
 def test_grid_optimizer():
