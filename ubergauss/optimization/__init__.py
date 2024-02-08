@@ -3,6 +3,7 @@ import pandas as pd
 from itertools import product
 from ubergauss import tools as ut
 import numpy as np
+import traceback
 from sklearn.model_selection import  BaseCrossValidator
 
 
@@ -13,7 +14,7 @@ def maketasks(param_dict):
 
 import time
 def gridsearch(func, param_dict = False, tasks = False, data = None,taskfilter =None,
-               score = 'score', df = True,timevar=f'time'):
+               score = 'score',mp = True,  df = True,timevar=f'time'):
 
     if not tasks:
         tasks = maketasks(param_dict)
@@ -26,15 +27,18 @@ def gridsearch(func, param_dict = False, tasks = False, data = None,taskfilter =
             res = func(*data,**t)
         except Exception as e:
             print(f"EXCEPTION:")
-            print(e)
+            traceback.print_exc()
             print(f"PARAMS:")
             print(t)
             print(f"EXCEPTION END")
             res = None
         return res, time.time()-start
 
-    res = ut.xxmap(func2, tasks)
-    # res = Map(func2, tasks)
+    if mp:
+        res = ut.xxmap(func2, tasks)
+    else:
+        res = Map(func2, tasks)
+
     # res = list(map(func2, tasks))
     t_r = filter(lambda r: r[1][0] is not None,zip(tasks,res))
     # for t,(r,sek) in zip(tasks, res):
