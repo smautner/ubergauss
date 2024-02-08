@@ -1,3 +1,4 @@
+from lmz import Map,Zip,Filter,Grouper,Range,Transpose,Flatten
 import pandas as pd
 from itertools import product
 from ubergauss import tools as ut
@@ -11,11 +12,14 @@ def maketasks(param_dict):
 
 
 import time
-def gridsearch(func, param_dict = False, tasks = False, data = None, score = 'score', df = True,timevar=f'time'):
+def gridsearch(func, param_dict = False, tasks = False, data = None,taskfilter =None,
+               score = 'score', df = True,timevar=f'time'):
 
     if not tasks:
         tasks = maketasks(param_dict)
-
+    if taskfilter:
+        tasks = list(filter(taskfilter ,tasks))
+    print(f"{len(tasks)=}")
     def func2(t):
         start = time.time()
         try:
@@ -30,6 +34,7 @@ def gridsearch(func, param_dict = False, tasks = False, data = None, score = 'sc
         return res, time.time()-start
 
     res = ut.xxmap(func2, tasks)
+    # res = Map(func2, tasks)
     # res = list(map(func2, tasks))
     t_r = filter(lambda r: r[1][0] is not None,zip(tasks,res))
     # for t,(r,sek) in zip(tasks, res):
