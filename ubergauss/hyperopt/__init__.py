@@ -24,6 +24,7 @@ def trial2df(trials):
     data['loss'] = res
     return pd.DataFrame(data)
 
+from hyperopt.pyll.stochastic import sample
 
 class spaceship():
     def __init__(self,name_range):
@@ -39,7 +40,8 @@ class spaceship():
             return k, int(v) if len(self.nr[k]) == 2 else v
         return dict(map(lol,best.items()))
 
-
+    def sample(self):
+        return sample(self.space)
 from hyperopt import  trials_from_docs
 
 
