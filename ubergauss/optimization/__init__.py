@@ -136,3 +136,39 @@ class groupedCV(BaseCrossValidator):
         else:
             test = np.array_split(z, 3)[0]
             yield self.arin_index(groups, test)
+
+
+
+
+def pareto_scores(df, score='score', data='dataset', scoretype = 'target', method = ['method']):
+    # collect Rs
+    names, runs = split_dataframe(df,method)
+
+    rids = Range(runs)
+
+    # now we collect scores for the Rs
+    fail  = np.zeros_like(rids)
+    for i in rids:
+        for j in rids:
+            if i != j:
+                fail[i] += dominated(runs[i],runs[j], score, scoretype, data)
+
+    return Zip(names, fail)
+
+def dominated(r1,r2, score, scoretype, data):
+    # how often does r1 get dominated?
+    r1 = r1.pivot_table(index=data, columns=scoretype, values=score)
+    r2 = r2.pivot_table(index=data, columns=scoretype, values=score)
+    return np.sum(np.all(r2 > r1, axis = 1))
+
+def split_dataframe(df, column_names):
+    groupname_df = df.groupby(column_names)
+    return Transpose(groupname_df)
+
+
+# def split_dataframe(df, column_names):
+#     grouped = df.groupby(column_names)
+#     split_dataframes = []
+#     for group_name, group_df in grouped:
+#         split_dataframes.append(group_df.copy())
+#     return split_dataframes
