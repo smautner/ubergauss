@@ -34,13 +34,13 @@ def readfile(fname):
 
 
 #################
-# fit 
+# fit
 ###############
 
 def ex(d, out=2.576):
     """
         d: list of values(y) at a single x position
-        
+
         return: [[outlier, low], 15.9 percentile, 50% percentile, 84.1 percentile, [outlier high]]
     """
     a,med,b = np.percentile(d, [15.9, 50, 84.1])
@@ -52,12 +52,12 @@ def ex(d, out=2.576):
 
 
 #################
-# PUT STUFF TOGETHER 
+# PUT STUFF TOGETHER
 ###############
 
 def draw(data,smooth = False):
     """
-        data: list of list of numbers :) 
+        data: list of list of numbers :)
 
         does: plot median line, areafill+-sigma, outliers as +
     """
@@ -72,14 +72,14 @@ def draw(data,smooth = False):
     H2 =[f(x,*p3) for x in X]
 
 
-    lo,med,hi = LOW, MED, HI 
+    lo,med,hi = LOW, MED, HI
     if smooth:
         lo,med,hi = L2,M2,H2
 
     # plot fillbetween
     plt.fill_between(X,lo,hi, color='green', alpha=0.4, label='median+-34.1th percentile')
 
-    # plot median 
+    # plot median
     plt.plot(X,med,label='median')
 
     # plot outlayers
@@ -97,18 +97,18 @@ def draw(data,smooth = False):
 
 
 
-def boxplot(d,x =1): 
-    # how wide is the box? 
-    width = min(.5,.15*(max(d)-min(d))) 
+def boxplot(d,x =1):
+    # how wide is the box?
+    width = min(.5,.15*(max(d)-min(d)))
 
-    # how tall is the box? 
+    # how tall is the box?
     oa,a,med,b,ob = ex(d)
     hight = b-a
 
     # draw the box
     rectangle = plt.Rectangle((x-.5*width,a), width, hight,ec="black",fill=False)
     plt.gca().add_patch(rectangle)
-    # draw the median 
+    # draw the median
     line = plt.Line2D((x-.5*width, x+.5*width), (med, med), lw=1.5, color='orange')
     plt.gca().add_line(line)
     # draw the outliers
@@ -121,6 +121,11 @@ def plotsmoothline(datax, datay):
     popt, pcov = curve_fit(f, datax ,datay)
     X = np.linspace(min(datax), max(datax), 100)
     plt.plot(X, map(lambda x:f(x,*popt), X))
+
+
+
+def scatter(X,y):
+    sns.scatterplot(x= X[:,0], y= X[:,1], hue = y )
 
 if __name__ == "__main__":
 
