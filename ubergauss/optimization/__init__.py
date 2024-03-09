@@ -38,7 +38,7 @@ def gridsearch(func, param_dict = False, tasks = False, data = None,taskfilter =
         res = ut.xxmap(func2, tasks)
     else:
         res = Map(func2, tasks)
-
+    print('DONE')
     # res = list(map(func2, tasks))
     t_r = filter(lambda r: r[1][0] is not None,zip(tasks,res))
     # for t,(r,sek) in zip(tasks, res):

@@ -2,6 +2,10 @@ from lmz import Map,Zip,Filter,Grouper,Range,Transpose
 import os
 
 from multiprocessing import Pool, current_process
+
+# import multiprocessing as mp
+# mp.set_start_method('fork')
+
 _func = None
 def worker_init(func):
   global _func
@@ -22,15 +26,17 @@ def xmap(func, iterable, n_jobs=None, tasksperchild = 1, **kwargs):
     func = partial(func, **kwargs)
     result_list_tqdm = []
     with Pool(n_jobs, initializer=worker_init, initargs=(func,),maxtasksperchild = tasksperchild) as p:
-        for result in tqdm.tqdm(p.imap(worker, iterable), total=len(iterable)):
-            result_list_tqdm.append(result)
-    return result_list_tqdm
+        return list( tqdm.tqdm(p.map(worker, iterable), total=len(iterable)))
+        # for result in tqdm.tqdm(p.imap(worker, iterable), total=len(iterable)):
+        #     result_list_tqdm.append(result)
+        # return result_list_tqdm
 
 
 def xxmap(func, iterable, n_jobs=None, tasksperchild = 1, **kwargs):
     '''if in a subprocess we do sequencial map else do distributed map'''
 
-    if current_process().name == 'MainProcess' and n_jobs != 1:
+    if current_process().name == 'MainProcess' and n_jobs not in [0,1]:
+        #mp.set_start_method('fork')
         return xmap(func, iterable, n_jobs=n_jobs, tasksperchild = tasksperchild, **kwargs)
 
     return Map(func,iterable,**kwargs)
