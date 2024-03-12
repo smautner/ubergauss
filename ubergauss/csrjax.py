@@ -1,10 +1,11 @@
 from lmz import Map,Zip,Filter,Grouper,Range,Transpose,Flatten
+import numpy as np
 import jax
 import jax.numpy as jnp
 from jax import grad, jit, vmap
 from jax.example_libraries.optimizers import adam
 from scipy.sparse import csr_matrix, coo_matrix
-from sklearn.decomposition import TruncatedSVD
+from sklearn.decomposition import TruncatedSVD, PCA
 
 def toCooTrip(X):
     coo=coo_matrix(X)
@@ -24,21 +25,29 @@ def loss(embedding, triplets):
     losses = (distance_pred - triplets[2]) ** 2
     return jnp.mean(losses)
 
+def inc_some(X,value=5,num=1):
+    zero_indices = np.argwhere(X.toarray() == 0)
+    np.random.shuffle(zero_indices)
+    zero_indices= zero_indices[:num*X.shape[0]]
+    for i,j in zero_indices:
+        X[i,j] = value
+    return X
 
 def embed(X,n_components = 2):
+    # inc_some(X, value= np.max(X) * 10,num = 10)
     coo_triplets = toCooTrip(X)
     # tsvd for init, should be nice as it plays well with sparse data
     embedding = TruncatedSVD(n_components=n_components).fit_transform(X)
-
+    # embedding = PCA(n_components=n_components).fit_transform(X.toarray())
 
     # Optimizer setup
-    step_size = 0.01
+    step_size = 0.02
     opt_init, opt_update, get_params = adam(step_size)
     opt_state = opt_init(embedding)
     grad_loss = grad(loss)
 
     # Training loop
-    for i in range(450):
+    for i in range(200):
         gradients = grad_loss(get_params(opt_state), coo_triplets)
         opt_state = opt_update(i, gradients, opt_state)
 
