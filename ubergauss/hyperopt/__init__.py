@@ -28,20 +28,33 @@ from hyperopt.pyll.stochastic import sample
 
 class spaceship():
     def __init__(self,name_range):
-        name_range = [ x.split() for x in name_range]
+        name_range = name_range.split('\n')
+        name_range = [x.strip() for x in name_range]
+        name_range = [ x.split() for x in name_range if x]
         name_range = [[l[0],l[1:]] for l in name_range]
         self.space = {}
         self.nr = dict(name_range)
-        for name, range in name_range:
-            self.space[name] = scope.int(hp.quniform(name,*map(int, range))) if len(range) == 3  else hp.uniform(name,*map(float,range))
+        for name, value_range in name_range:
+            if '[' in value_range[0]:
+                self.space[name] = hp.choice('bla',eval(''.join(value_range)))
+            else:
+                self.space[name] = scope.int(hp.quniform(name,*map(int, value_range))) if len(value_range) == 3  else hp.uniform(name,*map(float,value_range))
 
     def translate(self,best):
         def lol(k,v):
-            return k, int(v) if len(self.nr[k]) == 2 else v
+            return k, int(v) if len(self.nr[k],[]) == 2 else v
         return dict(map(lol,best.items()))
 
     def sample(self):
         return sample(self.space)
+
+if __name__ == f"__main__":
+    s= '''
+    Z 0 1
+    A [False, True]
+    '''
+    print(spaceship(s).sample())
+
 from hyperopt import  trials_from_docs
 
 
