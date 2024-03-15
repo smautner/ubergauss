@@ -29,53 +29,48 @@ def loss_justdistance(embedding, triplets):
     losses = (distance_pred - triplets[2]) ** 2
     return jnp.mean(losses)
 
-def loss(embedding, triplets, badtrip):
-    # distance_pred = jnp.linalg.norm(embedding[triplets[0]] - embedding[triplets[1]], axis=1)
-    distance_pred = (embedding[triplets[0]] - embedding[triplets[1]]) ** 2
-    distance_pred = distance_pred.sum(axis=1)
-    loss_near = distance_pred/(distance_pred+10)
+def loss(embedding, good_trip=None, bad_trip=None, w=(1,1)):
+    # distance_pred = jnp.linalg.norm(embedding[good_trip[0]] - embedding[good_trip[1]], axis=1)
+    nearpoint_dist = (embedding[good_trip[0]] - embedding[good_trip[1]]) ** 2; nearpoint_dist = nearpoint_dist.sum(axis=1)
+    loss_near = (nearpoint_dist+1)/(nearpoint_dist+10)
 
-    #jax.debug.print("{}", embedding[badtrip[0]] - embedding[badtrip[1]])
-    dp2 = (embedding[badtrip[0]] - embedding[badtrip[1]]) ** 2
-    dp2 = dp2.sum(axis=1)
-    # dp2 = jnp.linalg.norm(embedding[badtrip[0]] - embedding[badtrip[1]], axis=1)
-    loss_far = 1/(dp2+1)
+    farpoint_dist = (embedding[bad_trip[0]] - embedding[bad_trip[1]]) ** 2; farpoint_dist = farpoint_dist.sum(axis=1)
+    # dp2 = jnp.linalg.norm(embedding[bad_trip[0]] - embedding[bad_trip[1]], axis=1)
+    loss_far = 1/(farpoint_dist+1)
 
-
-    ln = jnp.mean(loss_near)
-    lf = jnp.mean(loss_far)
+    loss_near = jnp.sum(loss_near)
+    loss_far = jnp.sum(loss_far)
     # jax.debug.print("{}", ln+lf)
-    return ln+lf
+    return loss_near*w[0]+loss_far*w[1]
 
-def inc_some(X,value=5,num=1):
-    zero_indices = np.argwhere(X.toarray() == 0)
-    np.random.shuffle(zero_indices)
-    zero_indices= zero_indices[:num*X.shape[0]]
-    for i,j in zero_indices:
-        X[i,j] = value
-    return X
 
-def embed(X,n_components = 2):
-    X,Xbad=X
-    # inc_some(X, value= np.max(X) * 10,num = 10)
-    coo_triplets = toCooTrip(X)
-    bad_triplets = toCooTrip(Xbad)
-    # tsvd for init, should be nice as it plays well with sparse data
-    embedding = jnp.array(TruncatedSVD(n_components=n_components).fit_transform(X))
-    # embedding = PCA(n_components=n_components).fit_transform(X.toarray())
-
+def optimize(embedding, step_size = .2, steps = 100, **lossargs):
     # Optimizer setup
-    step_size = 0.02
     opt_init, opt_update, get_params = adam(step_size)
     opt_state = opt_init(embedding)
     grad_loss = grad(loss)
-
     # Training loop
-    for i in range(200):
-        gradients = grad_loss(get_params(opt_state), coo_triplets,bad_triplets)
+    for i in range(steps):
+        gradients = grad_loss(get_params(opt_state), **lossargs)
         opt_state = opt_update(i, gradients, opt_state)
 
     return get_params(opt_state)
+
+def embed(X,n_components = 2):
+    X,Xbad=X
+    good_trip = toCooTrip(X)
+    bad_trip = toCooTrip(Xbad)
+    # tsvd for init, should be nice as it plays well with sparse data
+    # embedding = jnp.array(TruncatedSVD(n_components=n_components).fit_transform(X)) # L shaped result
+    embedding = np.random.rand(X.shape[0],2)
+    # embedding = PCA(n_components=n_components).fit_transform(X.toarray())
+
+
+    #embedding = optimize(embedding,good_trip=good_trip, bad_trip = bad_trip, w = (2,1))
+    embedding = optimize(embedding,good_trip=good_trip, bad_trip = bad_trip, w = (1,5))
+    embedding = optimize(embedding,good_trip=good_trip, bad_trip = bad_trip, w = (2,1))
+
+    return embedding
 
 
 
