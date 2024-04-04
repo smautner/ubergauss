@@ -37,8 +37,10 @@ class spaceship():
         for name, value_range in name_range:
             if '[' in value_range[0]:
                 self.space[name] = hp.choice('bla',eval(''.join(value_range)))
+            elif len(value_range) == 3:
+                self.space[name] = scope.int(hp.quniform(name,*map(int, value_range)))
             else:
-                self.space[name] = scope.int(hp.quniform(name,*map(int, value_range))) if len(value_range) == 3  else hp.uniform(name,*map(float,value_range))
+                self.space[name] = hp.uniform(name,*map(float,value_range))
 
     def translate(self,best):
         def lol(k,v):

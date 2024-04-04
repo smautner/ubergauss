@@ -144,6 +144,7 @@ def pareto_scores(df, score='score', data='dataset', scoretype = 'target', metho
     # collect Rs
     names, runs = split_dataframe(df,method)
 
+    print(runs[0])
     rids = Range(runs)
 
     # now we collect scores for the Rs
