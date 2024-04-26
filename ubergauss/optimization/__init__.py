@@ -158,8 +158,9 @@ def pareto_scores(df, score='score', data='dataset', scoretype = 'target', metho
 
 def dominated(r1,r2, score, scoretype, data):
     # how often does r1 get dominated?
-    r1 = r1.pivot_table(index=data, columns=scoretype, values=score)
-    r2 = r2.pivot_table(index=data, columns=scoretype, values=score)
+    if data != '':
+        r1 = r1.pivot_table(index=data, columns=scoretype, values=score)
+        r2 = r2.pivot_table(index=data, columns=scoretype, values=score)
     return np.sum(np.all(r2 > r1, axis = 1))
 
 def split_dataframe(df, column_names):
