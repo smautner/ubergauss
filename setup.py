@@ -104,8 +104,9 @@ setup(
     package_data={},
     url='https://github.com/smautner/ubergauss',
     license='GPLv3',
-    description='sklearn clustering, betweenGaussian and diagonal-max-dist kneepoint detection',
-    #long_description=open('README.md').read(),
+    description='another machine learning library',
+    long_description=open('README.md').read(),
+    long_description_content_type = 'text/markdown',
     install_requires=[
         'scikit-learn', 'lmz', 'dill', 'scipy', 'numpy'
         ],
