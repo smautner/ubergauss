@@ -12,13 +12,11 @@ def count_non_zeros_per_row(csr_matrix):
         non_zero_counts.append(end_index - start_index)
     return non_zero_counts
 
-def graphumap(adjacency_matrix, n_dim = 2):
-    '''
-    csr_matrix is the distance matrix of the graph
-    '''
-    # initialize matrices
+
+def make_knn(adjacency_matrix):
     maxneigh = max(count_non_zeros_per_row(adjacency_matrix))
     newshape = (adjacency_matrix.shape[0], maxneigh)
+
     index = np.full(newshape,-1)
     dist = np.full(newshape,np.inf)
 
@@ -26,14 +24,30 @@ def graphumap(adjacency_matrix, n_dim = 2):
         order = np.argsort(row.data)
         index[i,:len(order)] = row.indices[order]
         dist[i,:len(order)] = row.data[order]
+    return index, dist
+
+def graphumap(adjacency_matrix, n_dim = 2,**umapargs):
+    '''
+    csr_matrix is the distance matrix of the graph
+    '''
+    # initialize matrices
+
+
+    # from bbknn.matrix import compute_connectivities_umap as ccu
+    # dist, index = ccu (index, dist,index.shape[0], maxneigh )
+    # dist = dist.todense()
+    # index = index.todense()
+
+
+    # dist[:,:int(maxneigh/2)] = 0.0001
+    # dist = np.full(newshape,0.0001)
+    index, dist = make_knn(adjacency_matrix)
 
     myknn = (index, dist, None)
-
     # import structout as so
     # so.heatmap(index)
     # so.heatmap(dist)
-
-    return umap.UMAP(n_neighbors = index.shape[1], n_components=n_dim, metric='precomputed', precomputed_knn= myknn).fit_transform(adjacency_matrix)
+    return umap.UMAP(n_neighbors = index.shape[1], n_components=n_dim, metric='precomputed', precomputed_knn= myknn,**umapargs).fit_transform(adjacency_matrix)
 
 
 import networkx  as nx
