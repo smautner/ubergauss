@@ -39,9 +39,11 @@ def gridsearch(func, param_dict = False, tasks = False, data = None,taskfilter =
     else:
         res = Map(func2, tasks)
     print('DONE')
-    # res = list(map(func2, tasks))
+
+    #  removes failed tasks
     t_r = filter(lambda r: r[1][0] is not None,zip(tasks,res))
-    # for t,(r,sek) in zip(tasks, res):
+
+    # this is updating the tasks
     for t,(r,sek) in t_r:
         if type(r) != dict:
             t[score] = r
@@ -51,7 +53,9 @@ def gridsearch(func, param_dict = False, tasks = False, data = None,taskfilter =
 
     if df:
         r= pd.DataFrame(tasks)
-        r.dropna(thresh=2, axis=1)
+        # r.dropna(thresh=2, axis=1) <- this shouldnt work anyaway as inplace is false per dfefault
+        # dropped_columns = df.columns.difference(df_cleaned.columns)
+
         return r
     return tasks
 
@@ -140,11 +144,19 @@ class groupedCV(BaseCrossValidator):
 
 
 
+
 def pareto_scores(df, score='score', data='dataset', scoretype = 'target', method = ['method']):
+    '''
+    so we expect a df in input,
+
+    method identifies the data sources that we are comparing
+    score is the score column
+    scoretype we use to distinguish between the different attributes that we compare
+
+    data is an index for the scores so we can match the scoretypes
+    '''
     # collect Rs
     names, runs = split_dataframe(df,method)
-
-    print(runs[0])
     rids = Range(runs)
 
     # now we collect scores for the Rs
@@ -158,10 +170,20 @@ def pareto_scores(df, score='score', data='dataset', scoretype = 'target', metho
 
 def dominated(r1,r2, score, scoretype, data):
     # how often does r1 get dominated?
+
+    # print(r1)
+    # print(f"{score=}")
+    # print(f"{scoretype=}")
+    # print(f"{data=}")
+
     if data != '':
-        r1 = r1.pivot_table(index=data, columns=scoretype, values=score)
-        r2 = r2.pivot_table(index=data, columns=scoretype, values=score)
-    return np.sum(np.all(r2 > r1, axis = 1))
+        r1 = r1.pivot_table(index=data, columns=scoretype, values=score).to_numpy()
+        r2 = r2.pivot_table(index=data, columns=scoretype, values=score).to_numpy()
+
+    count = 0
+    for row in r1:
+        count+= np.sum(np.all(r2 > row, axis = 1))
+    return count
 
 def split_dataframe(df, column_names):
     groupname_df = df.groupby(column_names)
