@@ -12,12 +12,42 @@ def maketasks(param_dict):
     return [dict(zip(param_dict.keys(), values)) for values in product(*param_dict.values())]
 
 
-import time
-def gridsearch(func, param_dict = False, tasks = False, data = None,taskfilter =None,
-               score = 'score',mp = True,  df = True,timevar=f'time'):
+def getvalues(val):
+    try:
+        a, b, c = val.split()
+        r=  np.linspace(float(a), float(b), int(c))
+        return r
+    except:
+        return eval(val)
 
-    if not tasks:
+def string_to_param_dict(text):
+    result = {}
+    for line in text.strip().splitlines():
+        if not line.strip():
+            continue
+        key, values = line.strip().split(maxsplit=1)
+        result[key] = getvalues(values)
+    return result
+
+import time
+def gridsearch(func,data = None, *, param_dict = False, tasks = False, taskfilter =None,
+               score = 'score',mp = True,  df = True, param_string = False , timevar=f'time'):
+    '''
+    ways to provide tasks:
+        - tasks: ive me a task list of dictionaries
+        - param_dict: a dict that defines valid options {paramname: [1,2,3]}
+        - param_string: either valid options param:['option1','option2']
+                                or linspace param: 1 1.5 11
+        - you could also use hyperopt.spaceship(string).sample() to sample tasks
+    '''
+    assert sum( [type(x) == bool for x in [param_string, param_dict, tasks]] )  == 2, 'we expect 2 to be false'
+
+    if param_string:
+        param_dict = string_to_param_dict(param_string)
+    if param_dict:
         tasks = maketasks(param_dict)
+
+
     if taskfilter:
         tasks = list(filter(taskfilter ,tasks))
     print(f"{len(tasks)=}")
@@ -98,11 +128,18 @@ def test_grid_optimizer():
     data = make_classification()
     grid = {'n_clusters': [2,3,4]}
     def run(X,y,**params):
-        clf = KMeans(**params)
-        yh = clf.fit_predict(X)
-        return ari(y,yh)
-    df = gridsearch(run, grid, data)
+        return 0
+
+
+    df = gridsearch(run, param_dict= grid, data = data)
     # print(df.corr(method=f'spearman'))
+    dfprint(df)
+
+    st = '''
+    ert 0 1 11
+    zomg ["1","2"]
+    '''
+    df = gridsearch(run,data, param_string=st)
     dfprint(df)
 
 
@@ -198,3 +235,6 @@ def split_dataframe(df, column_names):
 #     for group_name, group_df in grouped:
 #         split_dataframes.append(group_df.copy())
 #     return split_dataframes
+
+if __name__ == "__main__":
+    test_grid_optimizer()
