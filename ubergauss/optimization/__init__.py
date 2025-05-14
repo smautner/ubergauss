@@ -179,7 +179,9 @@ def dominated(r1,r2, score, scoretype, data):
     if data != '':
         r1 = r1.pivot_table(index=data, columns=scoretype, values=score).to_numpy()
         r2 = r2.pivot_table(index=data, columns=scoretype, values=score).to_numpy()
-
+    else:
+        r1 = r1.pivot_table(index=None, columns=scoretype, values=score).to_numpy()
+        r2 = r2.pivot_table(index=None, columns=scoretype, values=score).to_numpy()
     count = 0
     for row in r1:
         count+= np.sum(np.all(r2 > row, axis = 1))
