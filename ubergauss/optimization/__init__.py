@@ -30,31 +30,38 @@ def string_to_param_dict(text):
     return result
 
 import time
-def gridsearch(func,data = None, *, param_dict = False, tasks = False, taskfilter =None,
+def gridsearch(func,data_list = None, *, param_dict = False, tasks = False, taskfilter =None,
                score = 'score',mp = True,  df = True, param_string = False , timevar=f'time'):
     '''
     ways to provide tasks:
+        # data
+        - data_list [tupple being passed as *,..]
+
+        # tasks
         - tasks: ive me a task list of dictionaries
         - param_dict: a dict that defines valid options {paramname: [1,2,3]}
         - param_string: either valid options param:['option1','option2']
                                 or linspace param: 1 1.5 11
         - you could also use hyperopt.spaceship(string).sample() to sample tasks
-    '''
-    assert sum( [type(x) == bool for x in [param_string, param_dict, tasks]] )  == 2, 'we expect 2 to be false'
 
+
+    '''
+
+    ############
+    # setting up tasks
+    ##########
+    assert sum( [type(x) == bool for x in [param_string, param_dict, tasks]] )  == 2, 'we expect 2 to be false'
     if param_string:
         param_dict = string_to_param_dict(param_string)
     if param_dict:
         tasks = maketasks(param_dict)
-
-
     if taskfilter:
         tasks = list(filter(taskfilter ,tasks))
-    print(f"{len(tasks)=}")
+
     def func2(t):
         start = time.time()
         try:
-            res = func(*data,**t)
+            res = func(*data_list,**t)
         except Exception as e:
             print(f"EXCEPTION:")
             traceback.print_exc()
