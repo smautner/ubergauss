@@ -31,7 +31,7 @@ def string_to_param_dict(text):
 
 import time
 def gridsearch(func,data_list = None, *, param_dict = False, tasks = False, taskfilter =None,
-               score = 'score',mp = True,  df = True, param_string = False , timevar=f'time'):
+               score = 'score',mp = True,  df = True, param_string = False , timevar=f'time', **kwargs):
     '''
     ways to provide tasks:
         # data
@@ -51,6 +51,7 @@ def gridsearch(func,data_list = None, *, param_dict = False, tasks = False, task
     # setting up tasks
     ##########
     assert sum( [type(x) == bool for x in [param_string, param_dict, tasks]] )  == 2, 'we expect 2 to be false'
+    assert len(data_list) > 0
     if param_string:
         param_dict = string_to_param_dict(param_string)
     if param_dict:
@@ -61,7 +62,9 @@ def gridsearch(func,data_list = None, *, param_dict = False, tasks = False, task
     def func2(t):
         start = time.time()
         try:
-            res = func(*data_list,**t)
+            t.update(kwargs)
+            data = t.pop('datafield')
+            res = func(*data_list[data],**t)
         except Exception as e:
             print(f"EXCEPTION:")
             traceback.print_exc()
@@ -70,6 +73,13 @@ def gridsearch(func,data_list = None, *, param_dict = False, tasks = False, task
             print(f"EXCEPTION END")
             res = None
         return res, time.time()-start
+
+    def mktask(d,e):
+        e=e.copy()
+        e['datafield'] = d
+        return e
+
+    tasks = [ mktask(d,e) for d in range(len(data_list)) for e in tasks ]
 
     if mp:
         res = ut.xxmap(func2, tasks)

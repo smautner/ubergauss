@@ -1,11 +1,12 @@
 import numpy as np
 import functools
-from sklearn.mixture import GaussianMixture as gmm 
-import multiprocessing as mp                                                
+from sklearn.mixture import GaussianMixture as gmm
+import multiprocessing as mp
 import math
+import ubergauss.hubness as hubness
 
 ###
-# knee point detection 1: 
+# knee point detection 1:
 # choose value between gaussians
 ###
 
@@ -18,7 +19,7 @@ def only_between(cluster_probs,Y,gmm_means):
     '''removes outliers, i.e. sets 0 fields of z where a not between means'''
     mi,ma = gmm_means.min(),gmm_means.max()
     filtr = [ aa < mi or aa > ma for aa in Y ]
-    cluster_probs[filtr]=0 
+    cluster_probs[filtr]=0
     return cluster_probs
 
 def between_gaussians(values,**kwargs):
@@ -30,17 +31,17 @@ def between_gaussians(values,**kwargs):
 
 
 ####
-#  max distance to line 
-#  kneed implementaiton is annoying, 
+#  max distance to line
+#  kneed implementaiton is annoying,
 ######
 
-def diag_maxdist(values, debug=True): 
+def diag_maxdist(values, debug=True):
     points = [ (x,y) for x,y in enumerate(values)  ]
     x1,y1 = points[0]
     x2,y2 = points[-1]
     def dist(p):
         x0,y0 = p
-        return  ( (y2-y1)*x0 - (x2-x1)*y0 + x2*y1 -y2*x1) / math.sqrt(  (y2-y1)**2 + (x2-x1)**2 ) 
+        return  ( (y2-y1)*x0 - (x2-x1)*y0 + x2*y1 -y2*x1) / math.sqrt(  (y2-y1)**2 + (x2-x1)**2 )
 
 
     res  =list(map(dist,points))
@@ -57,12 +58,12 @@ def diag_maxdist(values, debug=True):
 ###
 # multiprocessing
 ###
-def mpmap(func, iterable, chunksize=1, poolsize=2):                            
-    pool = mp.Pool(poolsize)                                                    
-    result = pool.map(func, iterable, chunksize=chunksize)                      
-    pool.close()                                                                
-    pool.join()                                                                 
-    return list(result) 
+def mpmap(func, iterable, chunksize=1, poolsize=2):
+    pool = mp.Pool(poolsize)
+    result = pool.map(func, iterable, chunksize=chunksize)
+    pool.close()
+    pool.join()
+    return list(result)
 
 
 def traingmm(n_comp, X=None,n_init=10,**kwargs):
@@ -80,17 +81,17 @@ def get_model(X, poolsize = -1,
                  n_init = 30,
                  covariance_type = 'full',
                  use_bic = False, # bic or aic ;; aic should result in more clusters ;; penalty is lower for generating more clusters
-                 kneepoint_detection = lambda x: diag_maxdist(x,False), 
+                 kneepoint_detection = lambda x: diag_maxdist(x,False),
                  debug = False,
                  **kwargs):
 
     # trivial case:
-    if nclust_min == nclust_max: 
+    if nclust_min == nclust_max:
         return traingmm(nclust_min,X=X,n_init=n_init,**kwargs)
 
     # train models
     train = functools.partial(traingmm,X=X,n_init=n_init,**kwargs)
-    if poolsize < 2: 
+    if poolsize < 2:
         models = [train(x) for x in range(nclust_min, nclust_max)]
     else:
         models = mpmap( train , range(nclust_min,nclust_max), poolsize= poolsize)
@@ -105,12 +106,12 @@ def get_model(X, poolsize = -1,
 
 '''
 ####
-# OLD MAN, using KNEED to find kneepoints... 
+# OLD MAN, using KNEED to find kneepoints...
 ####
 def  get_model(X, poolsize = 4, nclust_min = 4, nclust_max = 20, n_init = 20,**kwargs):
     import kneed
     # trivial case:
-    if nclust_min == nclust_max: 
+    if nclust_min == nclust_max:
         return traingmm(nclust_min,X=X,n_init=n_init,**kwargs)
 
     # train models
@@ -137,7 +138,7 @@ def last_of_variate_gaussian(bics):
     predictions, model = gmm2(bics)
     zz = predictions[:,np.argmax(model.covariances_)]
     for i,v in enumerate(zz):
-        if v < .95: 
+        if v < .95:
             return i-1
     return -1
 '''
