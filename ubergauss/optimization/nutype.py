@@ -23,6 +23,8 @@ class nutype:
 
     def opti(self):
         self.df = op.gridsearch(self.f, data_list = [self.data],tasks = self.params)
+        sorted_df = self.df.sort_values(by='score', ascending=True)
+        self.scores+=sorted_df.score.tolist()
         self.nuParams()
         self.print()
 
@@ -33,14 +35,14 @@ class nutype:
         col_names = [col for col in self.df.columns if col not in ['time', 'score', 'datafield']]
         d = {}
         for a in col_names:
-            d[a] = sample(self.df.score, self.df[a],self.numsample)
+            d[a] = sample(scores, self.df[a].tolist(),self.numsample)
         d = pd.DataFrame(d)
+
         self.params =  d.to_dict(orient='records')
 
 
     def print(self):
         plot_params_with_hist(self.params, self.df)
-        self.scores+=sorted_df.score.tolist()
         plt.plot(self.scores)
         plt.show()
 
@@ -62,13 +64,13 @@ def plot_params_with_hist(params, df):
         fig, ax1 = plt.subplots(figsize=(8, 4))
 
         # Lineplot: param vs score
-        sns.lineplot(x=col, y="score", data=params, ax=ax1, color='blue', label='Score')
+        sns.lineplot(x=col, y="score", data=df, ax=ax1, color='blue', label='Score')
         ax1.set_ylabel("Score", color='blue')
         ax1.tick_params(axis='y', labelcolor='blue')
 
         # Histogram: distribution of values in df
         ax2 = ax1.twinx()
-        sns.histplot(df[col], ax=ax2, color='gray', alpha=0.3, bins=20, label='Distribution')
+        sns.histplot(params[col], ax=ax2, color='gray', alpha=0.3, bins=20, label='Distribution')
         ax2.set_ylabel("Frequency", color='gray')
         ax2.tick_params(axis='y', labelcolor='gray')
 
@@ -134,8 +136,10 @@ def floatsample(scores, values, numsample):
     else:
         scaled_scores = 100 * (top_scores - min_score) / (max_score - min_score)
 
-    flattened = [v for s, v in zip(scores, values) for _ in range(int(s))]
-    samples = np.random.normal(loc=np.mean(flattened), scale=np.std(flattened), size=numsample)
+    flattened = [v for s, v in zip(scaled_scores, values) for _ in range(int(s))]
+    samples = np.random.normal(loc=np.mean(flattened), scale=np.std(flattened)*.65, size=numsample)
+    # print mean and std
+    print(f"mean: {np.mean(flattened)}, std: {np.std(flattened)}")
     return samples
 
 
