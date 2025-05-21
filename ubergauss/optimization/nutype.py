@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import seaborn as sns
+from pprint import pprint
 
 '''
 for ints -> build a model cumsum(occcurance good / occurance bad) ,  then sample accoridngly
@@ -12,7 +13,7 @@ for floats -> gaussian sample from the top 50% of the scores
 
 class nutype:
 
-    def __init__(self, space, f, data, numsample = 100):
+    def __init__(self, space, f, data, numsample = 16):
         self.f = f
         self.data = data
         self.numsample = numsample
@@ -23,10 +24,12 @@ class nutype:
 
     def opti(self):
         self.df = op.gridsearch(self.f, data_list = [self.data],tasks = self.params)
-        sorted_df = self.df.sort_values(by='score', ascending=True)
-        self.scores+=sorted_df.score.tolist()
+        # drop nans
+        self.df = self.df.dropna()
+        self.df = self.df.sort_values(by='score', ascending=True)
+        self.scores+=self.df.score.tolist()
         self.nuParams()
-        self.print()
+        # self.print()
 
 
     def nuParams(self):
@@ -34,22 +37,23 @@ class nutype:
         # get all the column names except time, score and datafield
         col_names = [col for col in self.df.columns if col not in ['time', 'score', 'datafield']]
         d = {}
+        log = {}
         for a in col_names:
-            d[a] = sample(scores, self.df[a].tolist(),self.numsample)
+            d[a],a_log  = sample(scores, self.df[a].tolist(),self.numsample)
+            log[a] = a_log
         d = pd.DataFrame(d)
-
+        self.log = log
         self.params =  d.to_dict(orient='records')
 
 
     def print(self):
-        plot_params_with_hist(self.params, self.df)
+        print('Best params:', self.df.iloc[-1].to_dict())
         plt.plot(self.scores)
         plt.show()
+        plot_params_with_hist(self.params, self.df)
+        pprint(self.log)
 
-
-
-
-
+        # print best params
 
 
 
@@ -64,7 +68,7 @@ def plot_params_with_hist(params, df):
         fig, ax1 = plt.subplots(figsize=(8, 4))
 
         # Lineplot: param vs score
-        sns.lineplot(x=col, y="score", data=df, ax=ax1, color='blue', label='Score')
+        sns.scatterplot(x=col, y="score", data=df, ax=ax1, color='blue', label='Score')
         ax1.set_ylabel("Score", color='blue')
         ax1.tick_params(axis='y', labelcolor='blue')
 
@@ -112,7 +116,7 @@ def intsample(scores, values, numsample):
         chosen_index = np.searchsorted(cum_scores, r)
         return allints[chosen_index]
 
-    return [sample() for _ in range(numsample)]
+    return [sample() for _ in range(numsample)], dict(zip(allints, scores))
 
 
 def floatsample(scores, values, numsample):
@@ -125,7 +129,8 @@ def floatsample(scores, values, numsample):
     values = np.array(values)
 
     sorted_indices = np.argsort(scores)[::-1]
-    top_half = sorted_indices[:len(scores) // 2]
+    topat = int(len(scores) * 0.4)
+    top_half = sorted_indices[:topat]
     top_scores = scores[top_half]
     top_values = values[top_half]
 
@@ -135,11 +140,12 @@ def floatsample(scores, values, numsample):
         scaled_scores = np.full_like(top_scores, 100.0)
     else:
         scaled_scores = 100 * (top_scores - min_score) / (max_score - min_score)
+    flattened = [v for s, v in zip(scaled_scores, top_values) for _ in range(int(s))]
 
-    flattened = [v for s, v in zip(scaled_scores, values) for _ in range(int(s))]
-    samples = np.random.normal(loc=np.mean(flattened), scale=np.std(flattened)*.65, size=numsample)
+    # flattened = top_values
+    samples = np.random.normal(loc=np.mean(flattened), scale=np.std(flattened), size=numsample)
     # print mean and std
-    print(f"mean: {np.mean(flattened)}, std: {np.std(flattened)}")
-    return samples
+    log = f"mean: {np.mean(flattened)}, std: {np.std(flattened)}"
+    return samples, log
 
 
