@@ -23,7 +23,8 @@ class nutype:
 
 
     def opti(self):
-        self.df = op.gridsearch(self.f, data_list = [self.data],tasks = self.params)
+        self.df = op.gridsearch(self.f, data_list = self.data,tasks = self.params)
+        self.df = fix(self.df)
         # drop nans
         self.df = self.df.dropna()
         self.df = self.df.sort_values(by='score', ascending=True)
@@ -148,4 +149,29 @@ def floatsample(scores, values, numsample):
     log = f"mean: {np.mean(flattened)}, std: {np.std(flattened)}"
     return samples, log
 
+
+
+def fix(df):
+    # Identify columns that define a unique parameter combination (all except 'score' and 'datafield')
+    param_cols = [col for col in df.columns if col not in ['score', 'datafield' ,'time']]
+
+    # Calculate the average score for each parameter combination across all datafields
+    avg_scores = df.groupby(param_cols)['score'].mean().reset_index()
+
+    # Rename the calculated average score column to 'score'
+    avg_scores = avg_scores.rename(columns={'score': 'average_score'})
+
+    # Filter the original DataFrame to keep only rows where datafield is 0
+    df_filtered = df[df['datafield'] == 0].copy()
+
+    # Merge the calculated average scores back into the filtered DataFrame
+    # The 'score' column in df_filtered will be replaced by the 'average_score' from avg_scores
+    df_fixed = pd.merge(df_filtered.drop(columns='score'), avg_scores, on=param_cols, how='left')
+
+    # Rename the 'average_score' column back to 'score'
+    df_fixed = df_fixed.rename(columns={'average_score': 'score'})
+
+
+    # Return the DataFrame with scores fixed and filtered to datafield == 0
+    return df_fixed
 

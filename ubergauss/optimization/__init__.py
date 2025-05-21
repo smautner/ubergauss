@@ -78,7 +78,6 @@ def gridsearch(func,data_list = None, *, param_dict = False, tasks = False, task
         e=e.copy()
         e['datafield'] = d
         return e
-
     tasks = [ mktask(d,e) for d in range(len(data_list)) for e in tasks ]
 
     if mp:
