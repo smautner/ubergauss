@@ -1,11 +1,13 @@
+from lmz import Map,Zip,Filter,Grouper,Range,Transpose,Flatten
 from ubergauss import hyperopt as ho
 from ubergauss import optimization as op
+from functools import partial
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import seaborn as sns
 from pprint import pprint
-
+from hyperopt.pyll.stochastic import sample as hypersample
 '''
 for ints -> build a model cumsum(occcurance good / occurance bad) ,  then sample accoridngly
 for floats -> gaussian sample from the top 50% of the scores
@@ -17,8 +19,10 @@ class nutype:
         self.f = f
         self.data = data
         self.numsample = numsample
+
         space  = ho.spaceship(space)
         self.params =  [space.sample() for x in range(self.numsample) ]
+        self.samplers = make_samplers(self.params, space)
         self.scores = []
 
 
@@ -38,12 +42,10 @@ class nutype:
         # get all the column names except time, score and datafield
         col_names = [col for col in self.df.columns if col not in ['time', 'score', 'datafield']]
         d = {}
-        log = {}
+
         for a in col_names:
-            d[a],a_log  = sample(scores, self.df[a].tolist(),self.numsample)
-            log[a] = a_log
+            d[a]  = self.samplers[a].sample(scores, self.df[a].tolist(),self.numsample)
         d = pd.DataFrame(d)
-        self.log = log
         self.params =  d.to_dict(orient='records')
 
 
@@ -51,43 +53,32 @@ class nutype:
         print('Best params:', self.df.iloc[-1].to_dict())
         plt.plot(self.scores)
         plt.show()
-        plot_params_with_hist(self.params, self.df)
-        pprint(self.log)
+        plot_params_with_hist(self.params, self.df,self.samplers)
 
         # print best params
 
 
 
 
+def make_samplers(params:dict, spaceship) -> dict:
+    samplers = {}
+    for k,v in params[0].items():
+        orig = partial(hypersample, spaceship.space[k])
+        if type(v) == float:
+            sampler = floatsampler(orig)
+        else:
+            sampler = intsampler(orig)
+        samplers[k] = sampler
+    return samplers
 
-def plot_params_with_hist(params, df):
-    params = pd.DataFrame(params)
-    for col in params.columns:
-        if col == "score":
-            continue  # Skip the score column itself
 
-        fig, ax1 = plt.subplots(figsize=(8, 4))
-
-        # Lineplot: param vs score
-        sns.scatterplot(x=col, y="score", data=df, ax=ax1, color='blue', label='Score')
-        ax1.set_ylabel("Score", color='blue')
-        ax1.tick_params(axis='y', labelcolor='blue')
-
-        # Histogram: distribution of values in df
-        ax2 = ax1.twinx()
-        sns.histplot(params[col], ax=ax2, color='gray', alpha=0.3, bins=20, label='Distribution')
-        ax2.set_ylabel("Frequency", color='gray')
-        ax2.tick_params(axis='y', labelcolor='gray')
-
-        # Titles and layout
-        plt.title(f"{col} vs Score with Distribution Overlay")
-        fig.tight_layout()
-        plt.show()
-
-def sample(scores, values,n):
-    if type(values[0]) == float:
-        return floatsample(scores,values,n)
-    return intsample(scores,values,n)
+class intsampler():
+    def __init__(self, s):
+        self.sampler = s
+        self.log = 'i am just an intsampler'
+    def sample(self,scores, values, numsample):
+        r, self.log =  intsample(scores,values,numsample)
+        return r
 
 def intsample(scores, values, numsample):
     # take top 40% and bottom 40%
@@ -117,37 +108,60 @@ def intsample(scores, values, numsample):
         chosen_index = np.searchsorted(cum_scores, r)
         return allints[chosen_index]
 
-    return [sample() for _ in range(numsample)], dict(zip(allints, scores))
+    return [sample() for _ in range(numsample)], Zip(allints, scores)
 
+class floatsampler():
+    def __init__(self, s):
+        self.sampler = s
+        self.log = 'asd'
 
-def floatsample(scores, values, numsample):
-    # sort values by scores, keep top 50%
-    # scale scores to be between 0 and 100  -> n
-    # model = n*associated value for all n
-    # calculate mean and std -> sample 100 times
+    def sample(self,scores, values, numsample):
+        self.log = need_sampler(scores,values)
+        if self.log < 1: # basically turn it of as it doesnt help... maybe use correlation after all??
+            self.sampler = learn_float_sampler(scores,values)
+        return [self.sampler() for _ in range(numsample)]
 
-    scores = np.array(scores)
-    values = np.array(values)
+def need_sampler(scores,values):
+    # sort score and values by scores
+    # throw away the middle 20%
+    # then label topscores 1, bottomscores 0  -> y
+    #return sum(y == np.roll(y,-1))-2/len(y)
+    sv = Zip(scores,values)
+    scoresort = sorted(sv, key = lambda x:x[0])
+    p40 = int(len(sv)*.4)
+    score1 = [ (0,v) for s,v in scoresort[:p40] ]
+    score1+= [ (1,v) for s,v in scoresort[-p40:]]
+    valsort = sorted(score1, key = lambda x:x[1])
+    y = np.array([ii for ii,_ in valsort])
+    score = (np.sum(y == np.roll(y, -1)) -2) / (len(y)-2) # 2 misses are allowed :)
+    # 0 -> all the same  -> i shoudl resample
+    # 1 -> all different -> dont resample
+    return score
 
-    sorted_indices = np.argsort(scores)[::-1]
-    topat = int(len(scores) * 0.4)
-    top_half = sorted_indices[:topat]
-    top_scores = scores[top_half]
-    top_values = values[top_half]
+def learn_float_sampler(scores,values):
+        scores = np.array(scores)
+        values = np.array(values)
 
-    min_score = top_scores.min()
-    max_score = top_scores.max()
-    if max_score == min_score:
-        scaled_scores = np.full_like(top_scores, 100.0)
-    else:
-        scaled_scores = 100 * (top_scores - min_score) / (max_score - min_score)
-    flattened = [v for s, v in zip(scaled_scores, top_values) for _ in range(int(s))]
+        sorted_indices = np.argsort(scores)[::-1]
+        topat = int(len(scores) * 0.4)
+        top_half = sorted_indices[:topat]
+        top_scores = scores[top_half]
+        top_values = values[top_half]
 
-    # flattened = top_values
-    samples = np.random.normal(loc=np.mean(flattened), scale=np.std(flattened), size=numsample)
-    # print mean and std
-    log = f"mean: {np.mean(flattened)}, std: {np.std(flattened)}"
-    return samples, log
+        min_score = top_scores.min()
+        max_score = top_scores.max()
+        if max_score == min_score:
+            scaled_scores = np.full_like(top_scores, 100.0)
+        else:
+            scaled_scores = 100 * (top_scores - min_score) / (max_score - min_score)
+        flattened = [v for s, v in zip(scaled_scores, top_values) for _ in range(int(s))]
+
+        # flattened = top_values
+        m,s = np.mean(flattened),np.std(flattened)
+        # print(f"{m=} {s=} {values=}")
+        samples = lambda: np.random.normal(m,s)
+        # print mean and std
+        return samples
 
 
 
@@ -174,4 +188,29 @@ def fix(df):
 
     # Return the DataFrame with scores fixed and filtered to datafield == 0
     return df_fixed
+
+def plot_params_with_hist(params, df, samp):
+    params = pd.DataFrame(params)
+    for col in params.columns:
+        if col == "score":
+            continue  # Skip the score column itself
+
+        fig, ax1 = plt.subplots(figsize=(8, 4))
+
+        # Lineplot: param vs score
+        sns.scatterplot(x=col, y="score", data=df, ax=ax1, color='blue', label='Score')
+        ax1.set_ylabel("Score", color='blue')
+        ax1.tick_params(axis='y', labelcolor='blue')
+
+        # Histogram: distribution of values in df
+        ax2 = ax1.twinx()
+        sns.histplot(params[col], ax=ax2, color='gray', alpha=0.3, bins=20, label='Distribution')
+        ax2.set_ylabel("Frequency", color='gray')
+        ax2.tick_params(axis='y', labelcolor='gray')
+
+        # Titles and layout
+        plt.title(f"{col} -- {samp[col].log}")
+        fig.tight_layout()
+        plt.show()
+
 
