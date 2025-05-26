@@ -35,8 +35,9 @@ class nutype:
 
         self.nuParams()
 
-    def nuParams(self):
-        pool, weights = elitist_pool(self.runs,self.numsample // 2)
+    def nuParams(self ):
+        n = int(self.numsample * .4)
+        pool, weights = elitist_pool(self.runs,n)
         # pool, weights = self.loose_pool()
         weights = weights / np.sum(weights)
 
@@ -48,7 +49,7 @@ class nutype:
         new_params = [sample() for _ in range(self.numsample)]
 
         # mutate
-        new_params = self.mutate(new_params,.05)
+        new_params = self.mutate(new_params,.2)
 
         self.params = new_params
 
@@ -116,6 +117,8 @@ def loose_pool(runs, numold, numnew):
 
 def elitist_pool(runs, numselect):
     dfdf = pd.concat(runs)
+    #dfdf = runs[-1]
+
     dfdf = dfdf.sort_values(by='score', ascending=False).head(numselect)
     scores =  dfdf.score.tolist()
     dfdf = dfdf.drop(columns=['time', 'score', 'datafield'])
