@@ -121,23 +121,29 @@ class floatsampler():
             self.sampler = learn_float_sampler(scores,values)
         return [self.sampler() for _ in range(numsample)]
 
-def need_sampler(scores,values):
+def need_sampler_ring(scores,values):
     # sort score and values by scores
     # throw away the middle 20%
     # then label topscores 1, bottomscores 0  -> y
     #return sum(y == np.roll(y,-1))-2/len(y)
     sv = Zip(scores,values)
     scoresort = sorted(sv, key = lambda x:x[0])
+
     p40 = int(len(sv)*.4)
     score1 = [ (0,v) for s,v in scoresort[:p40] ]
     score1+= [ (1,v) for s,v in scoresort[-p40:]]
+
     valsort = sorted(score1, key = lambda x:x[1])
     y = np.array([ii for ii,_ in valsort])
+
     score = (np.sum(y == np.roll(y, -1)) -2) / (len(y)-2) # 2 misses are allowed :)
     # 0 -> all the same  -> i shoudl resample
     # 1 -> all different -> dont resample
     return score
 
+
+def need_sampler(scores,values):
+    return np.corrcoef(scores,values)
 def learn_float_sampler(scores,values):
         scores = np.array(scores)
         values = np.array(values)
