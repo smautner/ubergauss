@@ -116,9 +116,9 @@ class floatsampler():
         self.log = 'asd'
 
     def sample(self,scores, values, numsample):
-        self.log = need_sampler(scores,values)
-        if self.log < 1: # basically turn it of as it doesnt help... maybe use correlation after all??
-            self.sampler = learn_float_sampler(scores,values)
+        #self.log = need_sampler(scores,values)
+        #if self.log < 1: # basically turn it of as it doesnt help... maybe use correlation after all??
+        self.sampler = learn_float_sampler(scores,values)
         return [self.sampler() for _ in range(numsample)]
 
 def need_sampler(scores,values):
