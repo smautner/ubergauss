@@ -16,27 +16,38 @@ import random
 
 class nutype:
 
-    def __init__(self, space, f, data, numsample = 16):
+    def __init__(self, space, f, data, numsample = 16, floatavg = 1):
         self.f = f
         self.data = data
         self.numsample = numsample
         self.space  = ho.spaceship(space)
         self.params =  [self.space.sample() for x in range(self.numsample) ]
+        self.keyorder = list(self.params[0].keys())
         self.runs = []
+        self.floatavg = floatavg
+        self.seen = set()
+        self.dependencies = self.space.dependencies
 
+    def hashconfig(self,p):
+        return hash((p[k] for k in self.keyorder))
+    def register(self,p):
+        for e in p:
+            self.seen.add(self.hashconfig(e))
 
     def opti(self):
-
+        self.register(self.params)
         df = op.gridsearch(self.f, data_list = self.data,tasks = self.params)
         df = fix_dataindex(df)
         df = df.fillna(0)
         df = df.sort_values(by='score', ascending=True)
         self.runs.append(df)
-
         self.nuParams()
+        return self
 
     def nuParams(self):
-        pool, weights = elitist_pool(self.runs,self.numsample // 2)
+
+        select  = int(self.numsample*.5)
+        pool, weights = elitist_pool(self.runs, select)
         # pool, weights = self.loose_pool()
         weights = weights / np.sum(weights)
 
@@ -44,24 +55,48 @@ class nutype:
         def sample():
             x,y = np.random.choice(Range(len(pool)), size=2, replace=False, p=weights)
             assert x!=y
-            return combine(pool[x],pool[y])
+            return combine_dependant(pool[x],pool[y], self.floatavg, self.dependencies)
         new_params = [sample() for _ in range(self.numsample)]
 
         # mutate
-        new_params = self.mutate(new_params,.05)
+
+        new_params = [ self.mutate(p,.05) for p in new_params]
 
         self.params = new_params
 
 
-    def mutate(self, params, proba):
-        for p in params:
-            for k in list(p.keys()): # Create a list copy to allow modification during iteration
-                 if random.random() < proba:
-                     # Mutate by sampling a new value from the original search space
-                     p[k] = hypersample(self.space.space[k])
-        return params
+    # def nuParams(self):
+    #     select  = int(self.numsample*.6)
+    #     pool, weights = elitist_pool(self.runs, select)
+    #     weights = weights / np.sum(weights)
+    #     num_recombined = self.numsample // 2
+    #     num_copied = self.numsample - num_recombined
+    #     copied_indices = np.random.choice(Range(len(pool)), size=num_copied, replace=True, p=weights)
+    #     copied_params = [pool[i].copy() for i in copied_indices] # Use copy to avoid modifying pool
+    #     def sample_recombined():
+    #         x,y = np.random.choice(Range(len(pool)), size=2, replace=False, p=weights)
+    #         assert x!=y # Should not happen with replace=False and size=2 if len(pool) >= 2
+    #         return combine(pool[x],pool[y], self.floatavg)
+    #     recombined_params = [sample_recombined() for _ in range(num_recombined)]
+    #     mutated = [ self.mutated(p) for p in copied_params ]
+    #     self.params = mutated + recombined_params
+    # def mutated(self,p):
+    #     while self.hashconfig(p) in self.seen:
+    #         p = self.mutate(p, 0.1)
+    #     return p
+
+    def mutate(self, p, proba):
+        for k in list(p.keys()):
+            if random.random() < proba:# + proba*isinstance(p[k], int): # double mutation rate for categoricals
+                # Mutate by sampling a new value from the original search space
+                p[k] = hypersample(self.space.hoSpace[k])
+
+        return p
 
 
+    def getmax(self):
+        dfdf = pd.concat(self.runs)
+        return dfdf.sort_values(by='score', ascending=False).iloc[0]['score']
 
     def print(self):
         dfdf = pd.concat(self.runs)
@@ -69,15 +104,17 @@ class nutype:
         best_run = dfdf.sort_values(by='score', ascending=False).iloc[0]
         pprint(best_run.drop(['score', 'time', 'datafield']).to_dict())
 
-        mi = min(dfdf.score[:10])
-        plotscores = [ s if s > mi else mi for s in dfdf.score]
-        plt.plot(plotscores)
+        # mi = min(dfdf.score[:10])
+        # plotscores = [ s if s > mi else mi for s in dfdf.score]
+        plt.plot(dfdf.score.cummax().tolist())
         plt.show()
-        plot_params_with_hist(self.params,dfdf)
+        # plot_params_with_hist(self.params,dfdf)
+
+        return dfdf.sort_values(by='score', ascending=False).head(5)
 
 
 
-def combine( a, b):
+def combine( a, b, floatavg = True):
     new_params = {}
     for k in a.keys(): # assuming a and b have the same keys
         val_a = a[k]
@@ -87,10 +124,40 @@ def combine( a, b):
             new_params[k] = random.choice([val_a, val_b])
         elif isinstance(val_a, float):
             mean_val = random.choice([val_a, val_b])
-            std_val = abs(val_a - val_b) #/ 3.0
-            if std_val < 1e-6: # Use a small epsilon
-                std_val = 1e-6
-            new_params[k] = np.mean((val_a,val_b))#np.random.normal(mean_val, std_val)
+            # std_val = abs(val_a - val_b) #/ 3.0 if std_val < 1e-6: # Use a small epsilon std_val = 1e-6
+            new_params[k] =  np.mean((val_a,val_b)) if floatavg else mean_val#np.random.normal(mean_val, std_val)
+    return new_params
+
+
+def combine_dependant( a, b, floatavg = True, deps={}):
+    new_params = {}
+    for k in a.keys():
+
+        if k in deps: # k has a dependency
+            assert deps[k] in new_params # making sure the thing we depend on is there :)
+
+        val_a = a[k]
+        val_b = b[k]
+        # new_params[k] = random.choice([val_a, val_b])
+        if isinstance(val_a, int):
+            if k in deps:
+                parentchoice_is_a = new_params[deps[k]] == a[deps[k]]
+                parentchoice_is_b = new_params[deps[k]] == b[deps[k]]
+                if parentchoice_is_a and parentchoice_is_b:
+                    new_params[k] = random.choice([val_a, val_b])
+                else:
+                    new_params[k] = val_a if parentchoice_is_a else val_b
+            else:
+                new_params[k] = random.choice([val_a, val_b])
+        elif isinstance(val_a, float):
+            mean_val = random.choice([val_a, val_b])
+            new_params[k] =  np.mean((val_a,val_b)) if floatavg else mean_val#np.random.normal(mean_val, std_val)
+            if k in deps:
+                parentchoice_is_a = new_params[deps[k]] == a[deps[k]]
+                parentchoice_is_b = new_params[deps[k]] == b[deps[k]]
+                # if it is the same, skip
+                if not parentchoice_is_a and not parentchoice_is_b:
+                    new_params[k] = val_a if parentchoice_is_a else val_b
     return new_params
 
 
@@ -120,7 +187,7 @@ def elitist_pool(runs, numselect):
     scores =  dfdf.score.tolist()
     dfdf = dfdf.drop(columns=['time', 'score', 'datafield'])
     pool = dfdf.to_dict(orient='records')
-    weights= np.argsort(np.array(scores))+10
+    weights= np.argsort(np.array(scores))+3
     return pool, weights
 
 
@@ -178,4 +245,90 @@ def plot_params_with_hist(params, df):
         fig.tight_layout()
         plt.show()
 
+
+
+# we want to write an evaluation function. it produced a function that has n integer args and m float args.
+# when the correct integer is inputted (1) the score contribution mean is .5 otherwise 0, sd = 1
+# for floats the target is a parabola with the highpoint between 0..10, maybe a bit flattened, again noise with sd=1 is added
+
+
+
+
+def create_evaluation_function(n_int, m_float):
+    """
+    Creates a synthetic evaluation function for optimization testing.
+
+    The function evaluates a dictionary of parameters.
+    Integer parameters keyed 'int_i' contribute 0.5 to the score if their
+    value is exactly 1 (plus noise). Otherwise, they contribute 0 (plus noise).
+    Float parameters keyed 'float_j' contribute a score based on a Gaussian-like
+    function peaked at 5 (range 0-10 typically expected), plus noise.
+    Noise (std=1) is added independently to each parameter's contribution.
+
+    Args:
+        n_int (int): The number of integer parameters (int_0, int_1, ...).
+        m_float (int): The number of float parameters (float_0, float_1, ...).
+
+    Returns:
+        function: An evaluation function f(params, datafield=None) suitable
+                  for use with optimization libraries like ubergauss/hyperopt.
+    """
+    def evaluation_function(params, datafield=None):
+        """
+        Synthetic evaluation function based on parameter values.
+
+        Args:
+            params (dict): Dictionary of parameters to evaluate.
+                           Expected keys are 'int_0'...'int_{n_int-1}' and
+                           'float_0'...'float_{m_float-1}'.
+            datafield: Placeholder for potential data context (ignored here).
+
+        Returns:
+            float: The calculated score for the given parameters.
+        """
+        total_score = 0.0
+        noise_std = 1.0
+
+        # Contributions from integer parameters
+        for i in range(n_int):
+            key = f'int_{i}'
+            value = params.get(key)
+
+            # Check if the parameter exists and is an integer
+            if isinstance(value, int):
+                if value == 1:
+                    # Correct integer value
+                    mean_contrib = 0.5
+                else:
+                    # Incorrect integer value
+                    mean_contrib = 0.0
+            else:
+                # Parameter missing or not an integer type
+                mean_contrib = 0.0 # Treat as incorrect value
+
+            total_score += mean_contrib + np.random.normal(0, noise_std)
+
+        # Contributions from float parameters
+        for i in range(m_float):
+            key = f'float_{i}'
+            value = params.get(key)
+
+            # Check if the parameter exists and is numeric
+            if isinstance(value, (float, int)):
+                # Target shape: Gaussian peak at 5.0, scaled to contribute max 0.5
+                # 0.1 controls the width of the peak (smaller value -> wider peak)
+                target_value = 5.0
+                peak_contribution = 0.5
+                width_factor = 0.1 # Controls how steep the parabola/gaussian is
+
+                score_contribution = peak_contribution * np.exp(-width_factor * (value - target_value)**2)
+            else:
+                # Parameter missing or not a numeric type
+                score_contribution = 0.0 # Treat as poor value
+
+            total_score += score_contribution + np.random.normal(0, noise_std)
+
+        return total_score
+
+    return evaluation_function
 

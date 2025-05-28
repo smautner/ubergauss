@@ -19,68 +19,143 @@ class nutype:
         self.f = f
         self.data = data
         self.numsample = numsample
-
         space  = ho.spaceship(space)
         self.params =  [space.sample() for x in range(self.numsample) ]
-        self.samplers = make_samplers(self.params, space)
+
+        self.space = space
         self.scores = []
+        self.carry = pd.DataFrame()
+        self.runs = []
+        self.paramgroups = self.getgroups()
+
+        self.samplers = [Sampler(space,p) for p in self.paramgroups]
+
+    def getgroups(self):
+        keys = {k:[k] for k in self.params[0].keys()}
+        for slave, master in self.space.dependencies.items():
+            keys.pop(slave)
+            keys[master].append(slave)
+        r =  list(keys.values())
+        return r
+
 
 
     def opti(self):
+        # get new data
         self.df = op.gridsearch(self.f, data_list = self.data,tasks = self.params)
         self.df = fix(self.df)
-        # drop nans
-        self.df = self.df.dropna()
+        self.df = self.df.fillna(0)
         self.df = self.df.sort_values(by='score', ascending=True)
+
+        # save the run and get the next parameters
+        self.runs.append(self.df)
         self.scores+=self.df.score.tolist()
         self.nuParams()
+        return self
         # self.print()
 
 
     def nuParams(self):
-        scores = self.df.score.tolist()
-        # get all the column names except time, score and datafield
-        col_names = [col for col in self.df.columns if col not in ['time', 'score', 'datafield']]
-        d = {}
+        '''
+        first the non dependants can be done as usual,
+        then for the dependants, they need subsamplers , so a sampler returns a dict v:k... in the end i can combine all the dicts...
+        '''
+        # data = pd.concat((self.carry,self.df))
+        data = pd.concat((self.carry,self.df))
+        for s in self.samplers:
+            s.learn(data)
 
-        for a in col_names:
-            d[a]  = self.samplers[a].sample(scores, self.df[a].tolist(),self.numsample)
-        d = pd.DataFrame(d)
-        self.params =  d.to_dict(orient='records')
+        self.params = [self.sample() for _ in range(self.numsample)]
 
+        c = int(self.numsample*.4)
+        data = data.sort_values(by='score', ascending=False)
+        self.carry = data.head(c).copy()
+
+
+    def sample(self):
+        d={}
+        for s in self.samplers:
+            d.update(s.sample())
+        return d
+
+    def getmax(self):
+        dfdf = pd.concat(self.runs)
+        return dfdf.sort_values(by='score', ascending=False).iloc[0]['score']
 
     def print(self):
-        print('Best params:', self.df.iloc[-1].to_dict())
-        plt.plot(self.scores)
+        scr = pd.concat(self.runs)
+        best_run = scr.sort_values(by='score', ascending=False).iloc[0]
+        print('Best params:', best_run)
+
+        plt.plot(scr.score.cummax().tolist())
+
         plt.show()
         plot_params_with_hist(self.params, self.df,self.samplers)
 
         # print best params
 
 
+def Sampler(space, keys):
+    if len(keys) ==1:
+        return  Simple(space, keys[0])
+    else:
+        return  Samplerr(space, keys)
 
+class Samplerr():
+    def __init__(self, space, keys):
+        self.name = keys[0]
 
-def make_samplers(params:dict, spaceship) -> dict:
-    samplers = {}
-    for k,v in params[0].items():
-        orig = partial(hypersample, spaceship.space[k])
-        if type(v) == float:
-            sampler = floatsampler(orig)
-        else:
-            sampler = intsampler(orig)
-        samplers[k] = sampler
-    return samplers
+        self.mainsampler = Simple(space,keys[0])
+        self.sub = {cat:Simple(space,keys[1]) for cat in space.space[keys[0]][1] }
+        # orig = partial(hypersample, spaceship.hoSpace[k])
 
+    def learn(self, df):
+        self.mainsampler.learn(df)
+        for e in self.sub:
+            df2 = df[df[self.name] == e]
+            if len(df2)>2:
+                self.sub[e].learn(df2)
 
-class intsampler():
-    def __init__(self, s):
-        self.sampler = s
-        self.log = 'i am just an intsampler'
-    def sample(self,scores, values, numsample):
-        r, self.log =  intsample(scores,values,numsample)
+    def sample(self):
+        r = self.mainsampler.sample()
+
+        r.update(self.sub[list(r.values())[0]].sample())
         return r
 
-def intsample(scores, values, numsample):
+class Simple():
+    def __init__(self, space,key):
+        self.name=key
+        self.par = space.space[key]
+        self.sample_f = partial(hypersample, space.hoSpace[key])
+
+    def sample(self):
+        return {self.name:self.sample_f()}
+
+    def learn(self,df):
+        self.sample_f = mksampler(self.name,df,self.par)
+
+def mksampler(name,df,par):
+    if par[0] == 'cat':
+        return learn_cat_sampler(df.score,df[name])
+
+    df = df.tail(6)
+    if par[0] == 'float':
+        return learn_float_sampler(df.score,df[name])
+
+    if par[0] == 'int':
+        return learn_int_sampler(df.score,df[name],par[1])
+
+def learn_int_sampler(scores, values,par):
+    float_sampler = learn_float_sampler(scores,values)
+    def int_sampler():
+        while True:
+            v = int(float_sampler()+.5)
+            if par[0]<= v <= par[1]:
+                return v
+    return int_sampler
+
+
+def learn_cat_sampler(scores, values):
     # take top 40% and bottom 40%
     scores = np.array(scores)
     values = np.array(values)
@@ -96,7 +171,8 @@ def intsample(scores, values, numsample):
     def getscore(i):
         top_count = np.sum(values[top_40] == i)
         bottom_count = np.sum(values[bottom_40] == i) + 1
-        return top_count / bottom_count
+        scr =  top_count / bottom_count
+        return scr*scr
     scores = np.array([getscore(i) for i in allints])
 
     # now we can make a cumsum of the scores, scale up a random.random and choose one of the scores
@@ -107,19 +183,7 @@ def intsample(scores, values, numsample):
         r = np.random.uniform(0, total_score)
         chosen_index = np.searchsorted(cum_scores, r)
         return allints[chosen_index]
-
-    return [sample() for _ in range(numsample)], Zip(allints, scores)
-
-class floatsampler():
-    def __init__(self, s):
-        self.sampler = s
-        self.log = 'asd'
-
-    def sample(self,scores, values, numsample):
-        #self.log = need_sampler(scores,values)
-        #if self.log < 1: # basically turn it of as it doesnt help... maybe use correlation after all??
-        self.sampler = learn_float_sampler(scores,values)
-        return [self.sampler() for _ in range(numsample)]
+    return sample
 
 def need_sampler(scores,values):
     # sort score and values by scores
@@ -138,7 +202,7 @@ def need_sampler(scores,values):
     # 1 -> all different -> dont resample
     return score
 
-def learn_float_sampler(scores,values):
+def learn_float_sampler_old(scores,values):
         scores = np.array(scores)
         values = np.array(values)
 
@@ -162,6 +226,40 @@ def learn_float_sampler(scores,values):
         samples = lambda: np.random.normal(m,s)
         # print mean and std
         return samples
+
+
+def learn_float_sampler(scores,values):
+
+        scores = np.array(scores)
+        values = np.array(values)
+        weights = np.argsort(scores)
+
+        flattened = [v for s, v in zip(weights, values) for _ in range(int(s))]
+
+        m,s = np.mean(flattened),np.std(flattened)
+        print(f"{values,m,s=}")
+
+        # print(f"{m=} {s=} {values=}")
+        samples = lambda: np.random.normal(m,s)
+        # print mean and std
+        return samples
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -209,7 +307,7 @@ def plot_params_with_hist(params, df, samp):
         ax2.tick_params(axis='y', labelcolor='gray')
 
         # Titles and layout
-        plt.title(f"{col} -- {samp[col].log}")
+        plt.title(f"{col} ")
         fig.tight_layout()
         plt.show()
 

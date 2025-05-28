@@ -24,9 +24,10 @@ import tqdm
 
 def xmap(func, iterable, n_jobs=None, tasksperchild = 1, **kwargs):
     func = partial(func, **kwargs)
-    result_list_tqdm = []
+    # result_list_tqdm = []
     with Pool(n_jobs, initializer=worker_init, initargs=(func,),maxtasksperchild = tasksperchild) as p:
-        return list( tqdm.tqdm(p.map(worker, iterable), total=len(iterable)))
+        # return list( tqdm.tqdm(p.map(worker, iterable), total=len(iterable)))
+        return list(p.map(worker, iterable))
         # for result in tqdm.tqdm(p.imap(worker, iterable), total=len(iterable)):
         #     result_list_tqdm.append(result)
         # return result_list_tqdm
@@ -238,3 +239,13 @@ def cache(fname, makedata):
         data = makedata()
         dumpfile(data,fname)
         return data
+
+
+import sys
+import warnings
+def nuke():
+    original_stderr_fd = sys.stderr.fileno()
+    # saved_stderr_fd = os.dup(original_stderr_fd)
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(devnull, original_stderr_fd)
+    warnings.filterwarnings("ignore")

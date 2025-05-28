@@ -21,6 +21,9 @@ def getvalues(val):
         return eval(val)
 
 def string_to_param_dict(text):
+    '''
+    this is not a spaceship, its just a helper to make a paramdict from text
+    '''
     result = {}
     for line in text.strip().splitlines():
         if not line.strip():

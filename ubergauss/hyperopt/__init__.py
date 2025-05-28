@@ -1,3 +1,4 @@
+from lmz import Map,Zip,Filter,Grouper,Range,Transpose,Flatten
 # tools for hyperopt
 import pandas as pd
 import numpy as np
@@ -32,23 +33,51 @@ class spaceship():
         name_range = [x.strip() for x in name_range]
         name_range = [ x.split() for x in name_range if x]
         name_range = [[l[0],l[1:]] for l in name_range]
-        self.space = {}
+
         self.nr = dict(name_range)
+        self.dependencies ={}
+
+        parsedSpace = {}
         for name, value_range in name_range:
             if '[' in value_range[0]:
-                self.space[name] = hp.choice('bla',eval(''.join(value_range)))
+                parsedSpace[name] = ['cat',eval(''.join(value_range))]
+            elif '->' in value_range[0]:
+                self.dependencies[name] = value_range[1]
             elif len(value_range) == 3:
-                self.space[name] = scope.int(hp.quniform(name,*map(int, value_range)))
+                parsedSpace[name] = ['int', Map(int, value_range)]
             else:
-                self.space[name] = hp.uniform(name,*map(float,value_range))
+                parsedSpace[name] = ['float', Map(float,value_range)]
+
+        self.space = parsedSpace
+        self.hoSpace = self.makehospace()
+
+    def makehospace(self):
+        r = {}
+        for k,(typ,val) in self.space.items():
+            if typ == 'cat': r[k] = hp.choice('bla',val)
+            elif typ == 'int': r[k] = scope.int(hp.quniform(k,*val))
+            elif typ == 'float': r[k] = hp.uniform(k,*val)
+            else:
+                assert False, 'we should not be here'
+        return r
 
     def translate(self,best):
+        assert not self.dependencies, 'not implementd  :) '
         def lol(k,v):
             return k, int(v) if len(self.nr[k],[]) == 2 else v
         return dict(map(lol,best.items()))
 
     def sample(self):
-        return sample(self.space)
+        return sample(self.hoSpace)
+
+
+
+
+
+
+
+
+
 
 if __name__ == f"__main__":
     s= '''
