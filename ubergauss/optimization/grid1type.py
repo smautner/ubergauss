@@ -135,7 +135,8 @@ class nutype:
         dfdf = pd.concat(self.runs)
         # print the params with the highest score
         best_run = dfdf.sort_values(by='score', ascending=False).iloc[0]
-        pprint(best_run.drop(['score', 'time', 'datafield']).to_dict())
+        print(best_run)
+        #pprint(best_run.drop(['score', 'time', 'datafield']).to_dict())
 
         # mi = min(dfdf.score[:10])
         # plotscores = [ s if s > mi else mi for s in dfdf.score]

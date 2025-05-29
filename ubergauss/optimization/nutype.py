@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 from pprint import pprint
+import structout as so
 from hyperopt.pyll.stochastic import sample as hypersample
 '''
 for ints -> build a model cumsum(occcurance good / occurance bad) ,  then sample accoridngly
@@ -84,8 +85,9 @@ class nutype:
 
     def print(self):
         scr = pd.concat(self.runs)
+        so.lprint(scr.score)
         best_run = scr.sort_values(by='score', ascending=False).iloc[0]
-        print('Best params:', best_run)
+        print('Best params:\n', best_run)
 
         plt.plot(scr.score.cummax().tolist())
 
@@ -172,8 +174,12 @@ def learn_cat_sampler(scores, values):
         top_count = np.sum(values[top_40] == i)
         bottom_count = np.sum(values[bottom_40] == i) + 1
         scr =  top_count / bottom_count
-        return scr*scr
+        return scr
     scores = np.array([getscore(i) for i in allints])
+    print(dict(zip(allints, scores)))
+
+
+
 
     # now we can make a cumsum of the scores, scale up a random.random and choose one of the scores
 

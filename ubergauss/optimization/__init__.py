@@ -87,7 +87,6 @@ def gridsearch(func,data_list = None, *, param_dict = False, tasks = False, task
         res = ut.xxmap(func2, tasks)
     else:
         res = Map(func2, tasks)
-    print('DONE')
 
     #  removes failed tasks
     t_r = filter(lambda r: r[1][0] is not None,zip(tasks,res))

@@ -13,6 +13,8 @@ for ints -> build a model cumsum(occcurance good / occurance bad) ,  then sample
 for floats -> gaussian sample from the top 50% of the scores
 '''
 import random
+import structout as so
+import collections
 
 class nutype:
 
@@ -46,16 +48,16 @@ class nutype:
 
     def nuParams(self):
 
-        select  = int(self.numsample*.5)
+        select  = int(self.numsample*.4)
         pool, weights = elitist_pool(self.runs, select)
         # pool, weights = self.loose_pool()
         weights = weights / np.sum(weights)
-
         # recombine
         def sample():
             x,y = np.random.choice(Range(len(pool)), size=2, replace=False, p=weights)
             assert x!=y
-            return combine_dependant(pool[x],pool[y], self.floatavg, self.dependencies)
+            # return combine_dependant(pool[x],pool[y], self.floatavg, self.dependencies)
+            return combine(pool[x],pool[y], self.floatavg)
         new_params = [sample() for _ in range(self.numsample)]
 
         # mutate
@@ -100,16 +102,17 @@ class nutype:
 
     def print(self):
         dfdf = pd.concat(self.runs)
-        # print the params with the highest score
-        best_run = dfdf.sort_values(by='score', ascending=False).iloc[0]
-        pprint(best_run.drop(['score', 'time', 'datafield']).to_dict())
+        so.lprint(dfdf.score)
 
+        best_run = dfdf.sort_values(by='score', ascending=False).iloc[0]
+        print('Best params:\n', best_run)
+
+        # pprint(best_run.drop(['score', 'time', 'datafield']).to_dict())
         # mi = min(dfdf.score[:10])
         # plotscores = [ s if s > mi else mi for s in dfdf.score]
         plt.plot(dfdf.score.cummax().tolist())
         plt.show()
         # plot_params_with_hist(self.params,dfdf)
-
         return dfdf.sort_values(by='score', ascending=False).head(5)
 
 
@@ -138,25 +141,21 @@ def combine_dependant( a, b, floatavg = True, deps={}):
 
         val_a = a[k]
         val_b = b[k]
-        # new_params[k] = random.choice([val_a, val_b])
         if isinstance(val_a, int):
+            new_params[k] = random.choice([val_a, val_b])
             if k in deps:
-                parentchoice_is_a = new_params[deps[k]] == a[deps[k]]
-                parentchoice_is_b = new_params[deps[k]] == b[deps[k]]
-                if parentchoice_is_a and parentchoice_is_b:
-                    new_params[k] = random.choice([val_a, val_b])
-                else:
+                dep_var = deps[k]
+                if a[dep_var] != b[dep_var]: # are the parrents different
+                    # whiich parent are we following?
+                    parentchoice_is_a = new_params[deps[k]] == a[deps[k]]
                     new_params[k] = val_a if parentchoice_is_a else val_b
-            else:
-                new_params[k] = random.choice([val_a, val_b])
         elif isinstance(val_a, float):
             mean_val = random.choice([val_a, val_b])
             new_params[k] =  np.mean((val_a,val_b)) if floatavg else mean_val#np.random.normal(mean_val, std_val)
             if k in deps:
-                parentchoice_is_a = new_params[deps[k]] == a[deps[k]]
-                parentchoice_is_b = new_params[deps[k]] == b[deps[k]]
-                # if it is the same, skip
-                if not parentchoice_is_a and not parentchoice_is_b:
+                dep_var = deps[k]
+                if a[dep_var] != b[dep_var]: # are the parrents different
+                    parentchoice_is_a = new_params[deps[k]] == a[deps[k]]
                     new_params[k] = val_a if parentchoice_is_a else val_b
     return new_params
 
@@ -183,6 +182,7 @@ def loose_pool(runs, numold, numnew):
 
 def elitist_pool(runs, numselect):
     dfdf = pd.concat(runs)
+    dfdf = dfdf[dfdf.score > 0]
     dfdf = dfdf.sort_values(by='score', ascending=False).head(numselect)
     scores =  dfdf.score.tolist()
     dfdf = dfdf.drop(columns=['time', 'score', 'datafield'])

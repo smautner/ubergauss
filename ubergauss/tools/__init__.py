@@ -243,9 +243,31 @@ def cache(fname, makedata):
 
 import sys
 import warnings
-def nuke():
+import threading
+
+
+
+def nuke(filter_prefix="Numba"):
+    # Save the original stderr
     original_stderr_fd = sys.stderr.fileno()
-    # saved_stderr_fd = os.dup(original_stderr_fd)
-    devnull = os.open(os.devnull, os.O_WRONLY)
-    os.dup2(devnull, original_stderr_fd)
-    warnings.filterwarnings("ignore")
+    saved_stderr_fd = os.dup(original_stderr_fd)
+
+    # Create a pipe
+    r_fd, w_fd = os.pipe()
+
+    # Replace stderr with the write end of the pipe
+    os.dup2(w_fd, original_stderr_fd)
+    sys.stderr = os.fdopen(w_fd, 'w', buffering=1)
+
+    def reader():
+        with os.fdopen(r_fd, 'r') as pipe_reader, os.fdopen(saved_stderr_fd, 'w') as original_stderr:
+            for line in pipe_reader:
+                if not line.startswith(filter_prefix):
+                    original_stderr.write(line)
+                    original_stderr.flush()
+
+    threading.Thread(target=reader, daemon=True).start()
+
+    warnings.simplefilter("ignore")  # or "ignore" if you want to suppress Python warnings
+
+
