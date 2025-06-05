@@ -39,7 +39,6 @@ class nutype:
         self.exhausted = set()
         self.paramgroups = self.getgroups()
 
-
     def getgroups(self):
         keys = {k:[k] for k in self.params[0].keys()}
         for slave, master in self.dependencies.items():
@@ -48,7 +47,6 @@ class nutype:
         r =  list(keys.values())
         r = [ [rrr for rrr in rr if rrr not in self.exhausted] for rr in r   ]
         return r
-
 
     def opti(self):
         df = op.gridsearch(self.f, data_list = self.data,tasks = self.params)

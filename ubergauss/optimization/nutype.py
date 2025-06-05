@@ -14,22 +14,26 @@ for ints -> build a model cumsum(occcurance good / occurance bad) ,  then sample
 for floats -> gaussian sample from the top 50% of the scores
 '''
 
-class nutype:
 
-    def __init__(self, space, f, data, numsample = 16):
+
+
+class base():
+
+
+    def __init__(self, space, f, data, numsample = 16, hyperband = [] ):
         self.f = f
         self.data = data
         self.numsample = numsample
+        self.hyperband = hyperband
+        if hyperband:
+            self.numsample = numsample * 2**(len(hyperband))
+
         space  = ho.spaceship(space)
         self.params =  [space.sample() for x in range(self.numsample) ]
-
         self.space = space
         self.scores = []
-        self.carry = pd.DataFrame()
         self.runs = []
         self.paramgroups = self.getgroups()
-
-        self.samplers = [Sampler(space,p) for p in self.paramgroups]
 
     def getgroups(self):
         keys = {k:[k] for k in self.params[0].keys()}
@@ -39,11 +43,26 @@ class nutype:
         r =  list(keys.values())
         return r
 
+    def hb_pairs(self,x):
+        hb =[0]+x
+        return [(hb[i],hb[i+1])  for i in range(len(hb)-1)]
 
 
     def opti(self):
-        # get new data
-        self.df = op.gridsearch(self.f, data_list = self.data,tasks = self.params)
+        if self.hyperband:
+            df = pd.DataFrame()
+            self.original_params = self.params.copy()
+            for (start,end) in self.hb_pairs(self.hyperband):
+                df2 = op.gridsearch(self.f, data_list = self.data[start:end],tasks = self.params)
+                df = pd.concat((df,df2))
+                self.params, df = clean_params(df)
+            df2 = op.gridsearch(self.f, data_list = self.data[end:],tasks = self.params)
+            self.df = pd.concat((df,df2))
+
+        if not self.hyperband:
+            self.df = op.gridsearch(self.f, data_list = self.data,tasks = self.params)
+
+
         self.df = fix(self.df)
         self.df = self.df.fillna(0)
         self.df = self.df.sort_values(by='score', ascending=True)
@@ -55,12 +74,54 @@ class nutype:
         return self
         # self.print()
 
+    def getmax(self):
+        dfdf = pd.concat(self.runs)
+        return dfdf.sort_values(by='score', ascending=False).iloc[0]['score']
+
+    def print(self):
+        scr = pd.concat(self.runs)
+        so.lprint(scr.score)
+        best_run = scr.sort_values(by='score', ascending=False).iloc[0]
+        print('Best params:\n', best_run)
+        plt.plot(scr.score.cummax().tolist())
+        plt.show()
+        plot_params_with_hist(self.params, self.df,self.samplers)
+        # print best params
+
+
+
+
+
+def clean_params(df: pd.DataFrame) -> tuple:
+    # Compute average score per group
+    group_cols = [col for col in df.columns if col not in ['score', 'datafield' ,'time']]
+    group_scores = df.groupby(group_cols)['score'].mean().reset_index()
+
+    # Sort by score descending and select top 50%
+    top_groups = group_scores.sort_values(by='score', ascending=False)
+    top_groups = top_groups.head(len(top_groups)//2)
+
+    # Merge to filter original DataFrame
+    filtered_df = df.merge(top_groups[group_cols], on=group_cols, how='inner')
+
+    list_of_dicts = filtered_df[group_cols].drop_duplicates().to_dict(orient='records')
+    # breakpoint()
+    return  list_of_dicts, filtered_df
+
+
+
+
+class nutype(base):
 
     def nuParams(self):
         '''
         first the non dependants can be done as usual,
         then for the dependants, they need subsamplers , so a sampler returns a dict v:k... in the end i can combine all the dicts...
         '''
+        if not hasattr(self, 'samplers'):
+            self.samplers = [Sampler(self.space,p) for p in self.paramgroups]
+        if not hasattr(self, 'carry'):
+            self.carry = pd.DataFrame()
         # data = pd.concat((self.carry,self.df))
         data = pd.concat((self.carry,self.df))
         for s in self.samplers:
@@ -79,22 +140,8 @@ class nutype:
             d.update(s.sample())
         return d
 
-    def getmax(self):
-        dfdf = pd.concat(self.runs)
-        return dfdf.sort_values(by='score', ascending=False).iloc[0]['score']
 
-    def print(self):
-        scr = pd.concat(self.runs)
-        so.lprint(scr.score)
-        best_run = scr.sort_values(by='score', ascending=False).iloc[0]
-        print('Best params:\n', best_run)
 
-        plt.plot(scr.score.cummax().tolist())
-
-        plt.show()
-        plot_params_with_hist(self.params, self.df,self.samplers)
-
-        # print best params
 
 
 def Sampler(space, keys):
@@ -176,10 +223,7 @@ def learn_cat_sampler(scores, values):
         scr =  top_count / bottom_count
         return scr
     scores = np.array([getscore(i) for i in allints])
-    print(dict(zip(allints, scores)))
-
-
-
+    # print(dict(zip(allints, scores)))
 
     # now we can make a cumsum of the scores, scale up a random.random and choose one of the scores
 
@@ -243,21 +287,12 @@ def learn_float_sampler(scores,values):
         flattened = [v for s, v in zip(weights, values) for _ in range(int(s))]
 
         m,s = np.mean(flattened),np.std(flattened)
-        print(f"{values,m,s=}")
+        # print(f"{values,m,s=}")
 
         # print(f"{m=} {s=} {values=}")
         samples = lambda: np.random.normal(m,s)
         # print mean and std
         return samples
-
-
-
-
-
-
-
-
-
 
 
 
