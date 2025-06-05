@@ -1,34 +1,22 @@
 from lmz import Map,Zip,Filter,Grouper,Range,Transpose,Flatten
-from ubergauss import hyperopt as ho
-from ubergauss import optimization as op
-from functools import partial
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import seaborn as sns
-from pprint import pprint
 from hyperopt.pyll.stochastic import sample as hypersample
 '''
 for ints -> build a model cumsum(occcurance good / occurance bad) ,  then sample accoridngly
 for floats -> gaussian sample from the top 50% of the scores
 '''
 import random
-import structout as so
-import collections
+from ubergauss.optimization.nutype import base
 
-class nutype:
+class nutype(base):
 
-    def __init__(self, space, f, data, numsample = 16, floatavg = 1):
-        self.f = f
-        self.data = data
-        self.numsample = numsample
-        self.space  = ho.spaceship(space)
-        self.params =  [self.space.sample() for x in range(self.numsample) ]
-        self.keyorder = list(self.params[0].keys())
-        self.runs = []
+    def __init__(self, space, f, data, numsample = 16,hyperband=[], floatavg = 1):
+        super().__init__( space, f, data, numsample = numsample, hyperband = hyperband )
         self.floatavg = floatavg
         self.seen = set()
-        self.dependencies = self.space.dependencies
 
     def hashconfig(self,p):
         return hash((p[k] for k in self.keyorder))
@@ -36,85 +24,31 @@ class nutype:
         for e in p:
             self.seen.add(self.hashconfig(e))
 
-    def opti(self):
-        self.register(self.params)
-        df = op.gridsearch(self.f, data_list = self.data,tasks = self.params)
-        df = fix_dataindex(df)
-        df = df.fillna(0)
-        df = df.sort_values(by='score', ascending=True)
-        self.runs.append(df)
-        self.nuParams()
-        return self
-
     def nuParams(self):
 
-        select  = int(self.numsample*.4)
+        select  = int(self.numsample*.5)
         pool, weights = elitist_pool(self.runs, select)
         # pool, weights = self.loose_pool()
         weights = weights / np.sum(weights)
         # recombine
         def sample():
-            x,y = np.random.choice(Range(len(pool)), size=2, replace=False, p=weights)
+            x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False, p=weights)
             assert x!=y
-            # return combine_dependant(pool[x],pool[y], self.floatavg, self.dependencies)
-            return combine(pool[x],pool[y], self.floatavg)
+            return combine_aiming(pool[x],pool[y], weights[x] > weights[y], self.space)
+            # return combine(pool[x],pool[y], self.floatavg)
         new_params = [sample() for _ in range(self.numsample)]
 
         # mutate
-
         new_params = [ self.mutate(p,.05) for p in new_params]
-
         self.params = new_params
 
-
-    # def nuParams(self):
-    #     select  = int(self.numsample*.6)
-    #     pool, weights = elitist_pool(self.runs, select)
-    #     weights = weights / np.sum(weights)
-    #     num_recombined = self.numsample // 2
-    #     num_copied = self.numsample - num_recombined
-    #     copied_indices = np.random.choice(Range(len(pool)), size=num_copied, replace=True, p=weights)
-    #     copied_params = [pool[i].copy() for i in copied_indices] # Use copy to avoid modifying pool
-    #     def sample_recombined():
-    #         x,y = np.random.choice(Range(len(pool)), size=2, replace=False, p=weights)
-    #         assert x!=y # Should not happen with replace=False and size=2 if len(pool) >= 2
-    #         return combine(pool[x],pool[y], self.floatavg)
-    #     recombined_params = [sample_recombined() for _ in range(num_recombined)]
-    #     mutated = [ self.mutated(p) for p in copied_params ]
-    #     self.params = mutated + recombined_params
-    # def mutated(self,p):
-    #     while self.hashconfig(p) in self.seen:
-    #         p = self.mutate(p, 0.1)
-    #     return p
 
     def mutate(self, p, proba):
         for k in list(p.keys()):
             if random.random() < proba:# + proba*isinstance(p[k], int): # double mutation rate for categoricals
                 # Mutate by sampling a new value from the original search space
                 p[k] = hypersample(self.space.hoSpace[k])
-
         return p
-
-
-    def getmax(self):
-        dfdf = pd.concat(self.runs)
-        return dfdf.sort_values(by='score', ascending=False).iloc[0]['score']
-
-    def print(self):
-        dfdf = pd.concat(self.runs)
-        so.lprint(dfdf.score)
-
-        best_run = dfdf.sort_values(by='score', ascending=False).iloc[0]
-        print('Best params:\n', best_run)
-
-        # pprint(best_run.drop(['score', 'time', 'datafield']).to_dict())
-        # mi = min(dfdf.score[:10])
-        # plotscores = [ s if s > mi else mi for s in dfdf.score]
-        plt.plot(dfdf.score.cummax().tolist())
-        plt.show()
-        # plot_params_with_hist(self.params,dfdf)
-        return dfdf.sort_values(by='score', ascending=False).head(5)
-
 
 
 def combine( a, b, floatavg = True):
@@ -127,18 +61,38 @@ def combine( a, b, floatavg = True):
             new_params[k] = random.choice([val_a, val_b])
         elif isinstance(val_a, float):
             mean_val = random.choice([val_a, val_b])
-            # std_val = abs(val_a - val_b) #/ 3.0 if std_val < 1e-6: # Use a small epsilon std_val = 1e-6
             new_params[k] =  np.mean((val_a,val_b)) if floatavg else mean_val#np.random.normal(mean_val, std_val)
     return new_params
 
-
-def combine_dependant( a, b, floatavg = True, deps={}):
+def combine_aiming( a, b, agb=False, space=None):
     new_params = {}
     for k in a.keys():
+        val_a = a[k]
+        val_b = b[k]
+        typ = space.space[k][0]
+        if typ == 'cat':
+            new_params[k] = random.choice([val_a, val_b])
+            continue
 
+        better, good = (val_a, val_b) if agb else (val_b,val_a)
+        new = better + (better-good)/3
+        low, high = space.space[k][1][:2]
+        new = max(new,low)
+        new = min(high, new)
+        if typ == 'int':
+            new = int(new+.5)
+
+        new_params[k] = new
+
+    return new_params
+
+
+
+def combine_dependant( a, b, floatavg = True, deps={},agb=False):
+    new_params = {}
+    for k in a.keys():
         if k in deps: # k has a dependency
             assert deps[k] in new_params # making sure the thing we depend on is there :)
-
         val_a = a[k]
         val_b = b[k]
         if isinstance(val_a, int):
@@ -181,15 +135,22 @@ def loose_pool(runs, numold, numnew):
 
 
 def elitist_pool(runs, numselect):
+    # SELECT THE BEST
     dfdf = pd.concat(runs)
     dfdf = dfdf[dfdf.score > 0]
-    dfdf = dfdf.sort_values(by='score', ascending=False).head(numselect)
-    scores =  dfdf.score.tolist()
+    sorted = dfdf.sort_values(by='score', ascending=False)
+    dfdf = sorted.head(numselect)
+
+    scores =  dfdf.score
+    scores -= sorted.iloc[-1].score
+
+
     dfdf = dfdf.drop(columns=['time', 'score', 'datafield'])
     pool = dfdf.to_dict(orient='records')
-    weights= np.argsort(np.array(scores))+3
-    return pool, weights
 
+    #weights= np.argsort(np.array(scores))+3
+
+    return pool, scores.tolist()
 
 
 

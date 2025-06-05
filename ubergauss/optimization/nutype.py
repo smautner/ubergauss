@@ -19,7 +19,6 @@ for floats -> gaussian sample from the top 50% of the scores
 
 class base():
 
-
     def __init__(self, space, f, data, numsample = 16, hyperband = [] ):
         self.f = f
         self.data = data
@@ -85,7 +84,7 @@ class base():
         print('Best params:\n', best_run)
         plt.plot(scr.score.cummax().tolist())
         plt.show()
-        plot_params_with_hist(self.params, self.df,self.samplers)
+        plot_params_with_hist(self.params, self.df)
         # print best params
 
 
@@ -328,7 +327,7 @@ def fix(df):
     # Return the DataFrame with scores fixed and filtered to datafield == 0
     return df_fixed
 
-def plot_params_with_hist(params, df, samp):
+def plot_params_with_hist(params, df):
     params = pd.DataFrame(params)
     for col in params.columns:
         if col == "score":
