@@ -1,14 +1,9 @@
 from lmz import Map,Zip,Filter,Grouper,Range,Transpose,Flatten
-from ubergauss import hyperopt as ho
-from ubergauss import optimization as op
 from functools import partial
-import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-import seaborn as sns
-from pprint import pprint
-import structout as so
 from hyperopt.pyll.stochastic import sample as hypersample
+from ubergauss.optimization import baseoptimizer
 '''
 for ints -> build a model cumsum(occcurance good / occurance bad) ,  then sample accoridngly
 for floats -> gaussian sample from the top 50% of the scores
@@ -16,101 +11,7 @@ for floats -> gaussian sample from the top 50% of the scores
 
 
 
-
-class base():
-
-    def __init__(self, space, f, data, numsample = 16, hyperband = [] ):
-        self.f = f
-        self.data = data
-        self.numsample = numsample
-        self.hyperband = hyperband
-        if hyperband:
-            self.numsample = numsample * 2**(len(hyperband))
-
-        space  = ho.spaceship(space)
-        self.params =  [space.sample() for x in range(self.numsample) ]
-        self.space = space
-        self.scores = []
-        self.runs = []
-        self.paramgroups = self.getgroups()
-
-    def getgroups(self):
-        keys = {k:[k] for k in self.params[0].keys()}
-        for slave, master in self.space.dependencies.items():
-            keys.pop(slave)
-            keys[master].append(slave)
-        r =  list(keys.values())
-        return r
-
-    def hb_pairs(self,x):
-        hb =[0]+x
-        return [(hb[i],hb[i+1])  for i in range(len(hb)-1)]
-
-
-    def opti(self):
-        if self.hyperband:
-            df = pd.DataFrame()
-            self.original_params = self.params.copy()
-            for (start,end) in self.hb_pairs(self.hyperband):
-                df2 = op.gridsearch(self.f, data_list = self.data[start:end],tasks = self.params)
-                df = pd.concat((df,df2))
-                self.params, df = clean_params(df)
-            df2 = op.gridsearch(self.f, data_list = self.data[end:],tasks = self.params)
-            self.df = pd.concat((df,df2))
-
-        if not self.hyperband:
-            self.df = op.gridsearch(self.f, data_list = self.data,tasks = self.params)
-
-
-        self.df = fix(self.df)
-        self.df = self.df.fillna(0)
-        self.df = self.df.sort_values(by='score', ascending=True)
-
-        # save the run and get the next parameters
-        self.runs.append(self.df)
-        self.scores+=self.df.score.tolist()
-        self.nuParams()
-        return self
-        # self.print()
-
-    def getmax(self):
-        dfdf = pd.concat(self.runs)
-        return dfdf.sort_values(by='score', ascending=False).iloc[0]['score']
-
-    def print(self):
-        scr = pd.concat(self.runs)
-        so.lprint(scr.score)
-        best_run = scr.sort_values(by='score', ascending=False).iloc[0]
-        print('Best params:\n', best_run)
-        plt.plot(scr.score.cummax().tolist())
-        plt.show()
-        plot_params_with_hist(self.params, self.df)
-        # print best params
-
-
-
-
-
-def clean_params(df: pd.DataFrame) -> tuple:
-    # Compute average score per group
-    group_cols = [col for col in df.columns if col not in ['score', 'datafield' ,'time']]
-    group_scores = df.groupby(group_cols)['score'].mean().reset_index()
-
-    # Sort by score descending and select top 50%
-    top_groups = group_scores.sort_values(by='score', ascending=False)
-    top_groups = top_groups.head(len(top_groups)//2)
-
-    # Merge to filter original DataFrame
-    filtered_df = df.merge(top_groups[group_cols], on=group_cols, how='inner')
-
-    list_of_dicts = filtered_df[group_cols].drop_duplicates().to_dict(orient='records')
-    # breakpoint()
-    return  list_of_dicts, filtered_df
-
-
-
-
-class nutype(base):
+class nutype(baseoptimizer.base):
 
     def nuParams(self):
         '''
@@ -124,6 +25,7 @@ class nutype(base):
         # data = pd.concat((self.carry,self.df))
         data = pd.concat((self.carry,self.df))
         for s in self.samplers:
+            do, self.key_log[s.name] = check_col(self, s.name)
             s.learn(data)
 
         self.params = [self.sample() for _ in range(self.numsample)]
@@ -142,7 +44,6 @@ class nutype(base):
 
 
 
-
 def Sampler(space, keys):
     if len(keys) ==1:
         return  Simple(space, keys[0])
@@ -152,7 +53,6 @@ def Sampler(space, keys):
 class Samplerr():
     def __init__(self, space, keys):
         self.name = keys[0]
-
         self.mainsampler = Simple(space,keys[0])
         self.sub = {cat:Simple(space,keys[1]) for cat in space.space[keys[0]][1] }
         # orig = partial(hypersample, spaceship.hoSpace[k])
@@ -297,58 +197,100 @@ def learn_float_sampler(scores,values):
 
 
 
+def check_col(optimizer, key):
+    # for the key, we either cal shouldlearn
+    # for floats and ints log will just be the normalized value,
+    # for cat maybe the proba for each category
 
 
+    values = optimizer.df[key]
+    scores = optimizer.df.score
+    param_type = optimizer.space.space[key][0]
 
+    should = True
+    log = None
 
+    if param_type in ['float', 'int']:
+        values_reshaped = values.values.reshape(-1, 1)
+        log = should_learn_float(values_reshaped, scores.values)
+    elif param_type == 'cat':
+        log = should_learn_cat(values, scores)
 
+    return should, log
 
-def fix(df):
-    # Identify columns that define a unique parameter combination (all except 'score' and 'datafield')
-    param_cols = [col for col in df.columns if col not in ['score', 'datafield' ,'time']]
+from sklearn.neighbors import NearestNeighbors
 
-    # Calculate the average score for each parameter combination across all datafields
-    avg_scores = df.groupby(param_cols)['score'].mean().reset_index()
+def should_learn_float(x, y, n_neighbors=1):
+    """
+    Predicts y using average of y-values of nearest neighbors in x,
+    and returns the normalized prediction error.
+    """
+    x = np.asarray(x)
+    y = np.asarray(y)
 
-    # Rename the calculated average score column to 'score'
-    avg_scores = avg_scores.rename(columns={'score': 'average_score'})
+    # Fit Nearest Neighbors model (excluding the point itself)
+    nn = NearestNeighbors(n_neighbors=n_neighbors + 1, algorithm='auto')
+    nn.fit(x)
+    distances, indices = nn.kneighbors(x)
+    pred_y = np.array([
+        np.mean(y[indices[i][1:]]) for i in range(len(y))
+    ])
 
-    # Filter the original DataFrame to keep only rows where datafield is 0
-    df_filtered = df[df['datafield'] == 0].copy()
+    # Compute Mean Squared Error
+    mse = np.mean((y - pred_y) ** 2)
 
-    # Merge the calculated average scores back into the filtered DataFrame
-    # The 'score' column in df_filtered will be replaced by the 'average_score' from avg_scores
-    df_fixed = pd.merge(df_filtered.drop(columns='score'), avg_scores, on=param_cols, how='left')
+    # Expected squared difference between any two y values (normalizer)
+    diffs = y[:, None] - y[None, :]
+    expected_squared_diff = np.mean(diffs ** 2)
 
-    # Rename the 'average_score' column back to 'score'
-    df_fixed = df_fixed.rename(columns={'average_score': 'score'})
+    # Normalized error
+    normalized_error = mse / expected_squared_diff if expected_squared_diff != 0 else np.nan
 
+    return normalized_error
 
-    # Return the DataFrame with scores fixed and filtered to datafield == 0
-    return df_fixed
+from scipy.stats import binom
 
-def plot_params_with_hist(params, df):
-    params = pd.DataFrame(params)
-    for col in params.columns:
-        if col == "score":
-            continue  # Skip the score column itself
+def should_learn_cat(x, y, percentile=50, direction='high'):
+    """
+    Evaluate how each category in x performs in predicting high/low values of y.
 
-        fig, ax1 = plt.subplots(figsize=(8, 4))
+    Parameters:
+    - x: array-like (categorical)
+    - y: array-like (numeric target)
+    - percentile: int (e.g., 90 means top 10% of y are 'successes')
+    - direction: 'low' or 'high' — detect underperformance or overperformance
 
-        # Lineplot: param vs score
-        sns.scatterplot(x=col, y="score", data=df, ax=ax1, color='blue', label='Score')
-        ax1.set_ylabel("Score", color='blue')
-        ax1.tick_params(axis='y', labelcolor='blue')
+    Returns:
+    - DataFrame with columns: [category, count, successes, expected_successes, p_value]
+    """
 
-        # Histogram: distribution of values in df
-        ax2 = ax1.twinx()
-        sns.histplot(params[col], ax=ax2, color='gray', alpha=0.3, bins=20, label='Distribution')
-        ax2.set_ylabel("Frequency", color='gray')
-        ax2.tick_params(axis='y', labelcolor='gray')
+    # Define success threshold
+    threshold = np.percentile(y, percentile)
+    if direction == 'high':
+        success = y >= threshold
+    else:  # 'low'
+        success = y <= threshold
 
-        # Titles and layout
-        plt.title(f"{col} ")
-        fig.tight_layout()
-        plt.show()
+    df = pd.DataFrame({'x': x, 'success': success})
 
+    # Group by category
+    grouped = df.groupby('x')['success'].agg(['count', 'sum']).reset_index()
+    grouped.columns = ['category', 'n', 'k']
+    print(f"{ grouped=}")
+    grouped['p'] = (success.sum() / len(success))  # empirical success probability
+    grouped['expected'] = grouped['n'] * grouped['p']
+
+    # Compute binomial p-value (one-sided)
+    def compute_pval(row):
+        if direction == 'high':
+            # Is k unusually high?
+            return binom.sf(row.k - 1, row.n, row.p)
+        else:
+            # Is k unusually low?
+            return binom.cdf(row.k, row.n, row.p)
+
+    grouped['p_value'] = grouped.apply(compute_pval, axis=1)
+
+    grouped.pop('p')
+    return grouped.sort_values('p_value')
 

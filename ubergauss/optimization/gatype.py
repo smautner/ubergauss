@@ -13,7 +13,7 @@ from ubergauss.optimization.nutype import base
 
 class nutype(base):
 
-    def __init__(self, space, f, data, numsample = 16,hyperband=[], floatavg = 1):
+    def __init__(self, space, f, data, numsample = 16,hyperband=[], floatavg =0):
         super().__init__( space, f, data, numsample = numsample, hyperband = hyperband )
         self.floatavg = floatavg
         self.seen = set()
@@ -26,7 +26,7 @@ class nutype(base):
 
     def nuParams(self):
 
-        select  = int(self.numsample*.5)
+        select  = int(self.numsample*.4)
         pool, weights = elitist_pool(self.runs, select)
         # pool, weights = self.loose_pool()
         weights = weights / np.sum(weights)
@@ -35,7 +35,7 @@ class nutype(base):
             x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False, p=weights)
             assert x!=y
             return combine_aiming(pool[x],pool[y], weights[x] > weights[y], self.space)
-            # return combine(pool[x],pool[y], self.floatavg)
+            # return combine(pool[x],pool[y], self.space)
         new_params = [sample() for _ in range(self.numsample)]
 
         # mutate
@@ -51,18 +51,42 @@ class nutype(base):
         return p
 
 
-def combine( a, b, floatavg = True):
+# def combine( a, b, floatavg = True):
+#     new_params = {}
+#     for k in a.keys(): # assuming a and b have the same keys
+#         val_a = a[k]
+#         val_b = b[k]
+#         # new_params[k] = random.choice([val_a, val_b])
+#         if isinstance(val_a, int):
+#             new_params[k] = random.choice([val_a, val_b])
+#         elif isinstance(val_a, float):
+#             mean_val = random.choice([val_a, val_b])
+#             new_params[k] =  np.mean((val_a,val_b)) if floatavg else mean_val#np.random.normal(mean_val, std_val)
+#     return new_params
+
+
+def combine( a, b, space=None):
     new_params = {}
-    for k in a.keys(): # assuming a and b have the same keys
+    for k in a.keys():
         val_a = a[k]
         val_b = b[k]
-        # new_params[k] = random.choice([val_a, val_b])
-        if isinstance(val_a, int):
-            new_params[k] = random.choice([val_a, val_b])
-        elif isinstance(val_a, float):
-            mean_val = random.choice([val_a, val_b])
-            new_params[k] =  np.mean((val_a,val_b)) if floatavg else mean_val#np.random.normal(mean_val, std_val)
+        typ = space.space[k][0]
+
+        if typ == 'cat':
+            new_params[k] = random.choice([val_b, val_a])
+            continue
+        # new = better + (better-good)/2
+        new = random.choice([val_b, val_a])
+        new = np.random.normal(new, abs(val_a - val_b))
+
+        low, high = space.space[k][1][:2]
+        new = max(new,low)
+        new = min(high, new)
+        if typ == 'int':
+            new = int(new+.5)
+        new_params[k] = new
     return new_params
+
 
 def combine_aiming( a, b, agb=False, space=None):
     new_params = {}
@@ -70,20 +94,20 @@ def combine_aiming( a, b, agb=False, space=None):
         val_a = a[k]
         val_b = b[k]
         typ = space.space[k][0]
-        if typ == 'cat':
-            new_params[k] = random.choice([val_a, val_b])
-            continue
 
         better, good = (val_a, val_b) if agb else (val_b,val_a)
-        new = better + (better-good)/3
+        if typ == 'cat':
+            new_params[k] = random.choice([better,good])
+            continue
+        # new = better + (better-good)/2
+        new = np.random.normal(better, abs(better-good))
+
         low, high = space.space[k][1][:2]
         new = max(new,low)
         new = min(high, new)
         if typ == 'int':
             new = int(new+.5)
-
         new_params[k] = new
-
     return new_params
 
 
@@ -137,6 +161,7 @@ def loose_pool(runs, numold, numnew):
 def elitist_pool(runs, numselect):
     # SELECT THE BEST
     dfdf = pd.concat(runs)
+    # dfdf = runs[-1]
     dfdf = dfdf[dfdf.score > 0]
     sorted = dfdf.sort_values(by='score', ascending=False)
     dfdf = sorted.head(numselect)
