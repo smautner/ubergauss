@@ -4,44 +4,58 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 from hyperopt.pyll.stochastic import sample as hypersample
+from pprint import pprint
 '''
 for ints -> build a model cumsum(occcurance good / occurance bad) ,  then sample accoridngly
 for floats -> gaussian sample from the top 50% of the scores
 '''
 import random
-from ubergauss.optimization.nutype import base
+from ubergauss.optimization import baseoptimizer
 
-class nutype(base):
+class nutype(baseoptimizer.base):
 
     def __init__(self, space, f, data, numsample = 16,hyperband=[], floatavg =0):
         super().__init__( space, f, data, numsample = numsample, hyperband = hyperband )
         self.floatavg = floatavg
         self.seen = set()
+        self.keyorder = list(self.params[0].keys())
 
     def hashconfig(self,p):
-        return hash((p[k] for k in self.keyorder))
+        return hash(tuple(p[k] for k in self.keyorder))
     def register(self,p):
         for e in p:
             self.seen.add(self.hashconfig(e))
 
-    def nuParams(self):
 
+    def nuParams(self):
         select  = int(self.numsample*.4)
-        pool, weights = elitist_pool(self.runs, select)
+        # pool, weights = elitist_pool(self.runs, select)
+        pool, weights = new_pool(self.runs, select)
         # pool, weights = self.loose_pool()
         weights = weights / np.sum(weights)
         # recombine
-        def sample():
+        new_params= []
+        while len(new_params) < self.numsample:
             x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False, p=weights)
-            assert x!=y
-            return combine_aiming(pool[x],pool[y], weights[x] > weights[y], self.space)
-            # return combine(pool[x],pool[y], self.space)
-        new_params = [sample() for _ in range(self.numsample)]
+            #x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False)
+            # candidate = combine_aiming(pool[x],pool[y], weights[x] > weights[y], self.space)
+            candidate =  combine(pool[x],pool[y], self.space)
+            if self.hashconfig(candidate) not in self.seen:
+                self.register([candidate])
+                new_params.append(candidate)
+
+            # else:
+            #     print(self.seen)
+            #     print(self.hashconfig(candidate))
+            #     print(pool[x])
+            #     print(pool[y])
+            #     print(candidate)
+
+        #new_params = [sample() for _ in range(self.numsample)]
 
         # mutate
         new_params = [ self.mutate(p,.05) for p in new_params]
         self.params = new_params
-
 
     def mutate(self, p, proba):
         for k in list(p.keys()):
@@ -51,34 +65,17 @@ class nutype(base):
         return p
 
 
-# def combine( a, b, floatavg = True):
-#     new_params = {}
-#     for k in a.keys(): # assuming a and b have the same keys
-#         val_a = a[k]
-#         val_b = b[k]
-#         # new_params[k] = random.choice([val_a, val_b])
-#         if isinstance(val_a, int):
-#             new_params[k] = random.choice([val_a, val_b])
-#         elif isinstance(val_a, float):
-#             mean_val = random.choice([val_a, val_b])
-#             new_params[k] =  np.mean((val_a,val_b)) if floatavg else mean_val#np.random.normal(mean_val, std_val)
-#     return new_params
-
-
 def combine( a, b, space=None):
     new_params = {}
     for k in a.keys():
         val_a = a[k]
         val_b = b[k]
         typ = space.space[k][0]
-
         if typ == 'cat':
             new_params[k] = random.choice([val_b, val_a])
             continue
-        # new = better + (better-good)/2
-        new = random.choice([val_b, val_a])
-        new = np.random.normal(new, abs(val_a - val_b))
-
+        new = np.mean([val_b, val_a])
+        new = np.random.normal(new, abs(val_a - val_b)*.5)
         low, high = space.space[k][1][:2]
         new = max(new,low)
         new = min(high, new)
@@ -88,74 +85,30 @@ def combine( a, b, space=None):
     return new_params
 
 
-def combine_aiming( a, b, agb=False, space=None):
-    new_params = {}
-    for k in a.keys():
-        val_a = a[k]
-        val_b = b[k]
-        typ = space.space[k][0]
+def new_pool(runs, numselect):
 
-        better, good = (val_a, val_b) if agb else (val_b,val_a)
-        if typ == 'cat':
-            new_params[k] = random.choice([better,good])
-            continue
-        # new = better + (better-good)/2
-        new = np.random.normal(better, abs(better-good))
-
-        low, high = space.space[k][1][:2]
-        new = max(new,low)
-        new = min(high, new)
-        if typ == 'int':
-            new = int(new+.5)
-        new_params[k] = new
-    return new_params
-
-
-
-def combine_dependant( a, b, floatavg = True, deps={},agb=False):
-    new_params = {}
-    for k in a.keys():
-        if k in deps: # k has a dependency
-            assert deps[k] in new_params # making sure the thing we depend on is there :)
-        val_a = a[k]
-        val_b = b[k]
-        if isinstance(val_a, int):
-            new_params[k] = random.choice([val_a, val_b])
-            if k in deps:
-                dep_var = deps[k]
-                if a[dep_var] != b[dep_var]: # are the parrents different
-                    # whiich parent are we following?
-                    parentchoice_is_a = new_params[deps[k]] == a[deps[k]]
-                    new_params[k] = val_a if parentchoice_is_a else val_b
-        elif isinstance(val_a, float):
-            mean_val = random.choice([val_a, val_b])
-            new_params[k] =  np.mean((val_a,val_b)) if floatavg else mean_val#np.random.normal(mean_val, std_val)
-            if k in deps:
-                dep_var = deps[k]
-                if a[dep_var] != b[dep_var]: # are the parrents different
-                    parentchoice_is_a = new_params[deps[k]] == a[deps[k]]
-                    new_params[k] = val_a if parentchoice_is_a else val_b
-    return new_params
-
-
-def loose_pool(runs, numold, numnew):
-    # pick hald from the current pool
-    new = runs[-1].sort_values(by='score', ascending=False).head(numnew)
-    # pick 25 % old ones
-    if len(runs) > 1:
+    if len(runs) == 1:
+        old = pd.DataFrame()
+        new = runs[0]
+        new = new.sort_values(by='score', ascending=False).head(numselect)
+    else:
+        new = runs[-1]
+        new = new.sort_values(by='score', ascending=False).head(numselect//2)
         old = pd.concat(runs[:-1])
-        old = old.sort_values(by='score', ascending=False).head(numold)
-    # concat
-    dfdf = pd.concat([old,new])
-    scores =  dfdf.score.tolist()
+        old = old.sort_values(by='score', ascending=False).head(numselect//2)
+
+    dfdf = pd.concat((new, old))
+    return df_to_params(dfdf)
+
+
+
+def df_to_params(dfdf):
+    # scores -= sorted.iloc[-5].score
+    scores =  dfdf.score
     dfdf = dfdf.drop(columns=['time', 'score', 'datafield'])
     pool = dfdf.to_dict(orient='records')
-    # add random instances
-    # pool += [self.space.sample() for _ in range(self.numsample - len(pool))]
-    weights= np.argsort(np.array(scores))+5
-    return pool, weights
-
-
+    weights= np.argsort(np.array(scores))
+    return pool,weights # scores.tolist()
 
 
 def elitist_pool(runs, numselect):
@@ -165,23 +118,8 @@ def elitist_pool(runs, numselect):
     dfdf = dfdf[dfdf.score > 0]
     sorted = dfdf.sort_values(by='score', ascending=False)
     dfdf = sorted.head(numselect)
-
-    scores =  dfdf.score
-    scores -= sorted.iloc[-1].score
-
-
-    dfdf = dfdf.drop(columns=['time', 'score', 'datafield'])
-    pool = dfdf.to_dict(orient='records')
-
-    #weights= np.argsort(np.array(scores))+3
-
-    return pool, scores.tolist()
-
-
-
-
-
-
+    # scores -= sorted.iloc[-5].score
+    return df_to_params(dfdf)
 
 def fix_dataindex(df):
     # Identify columns that define a unique parameter combination (all except 'score' and 'datafield')
@@ -233,12 +171,65 @@ def plot_params_with_hist(params, df):
 
 
 
-# we want to write an evaluation function. it produced a function that has n integer args and m float args.
-# when the correct integer is inputted (1) the score contribution mean is .5 otherwise 0, sd = 1
-# for floats the target is a parabola with the highpoint between 0..10, maybe a bit flattened, again noise with sd=1 is added
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+def combine_aiming( a, b, agb=False, space=None):
+    new_params = {}
+    for k in a.keys():
+        val_a = a[k]
+        val_b = b[k]
+        typ = space.space[k][0]
+        better, good = (val_a, val_b) if agb else (val_b,val_a)
+        if typ == 'cat':
+            new_params[k] = random.choice([better,good])
+            continue
+        #new =  (better+good)/2
+        new = np.random.normal(better, abs(better-good)*.5)
+        low, high = space.space[k][1][:2]
+        new = max(new,low)
+        new = min(high, new)
+        if typ == 'int':
+            new = int(new+.5)
+        new_params[k] = new
+    return new_params
+
+
+def combine_dependant( a, b, floatavg = True, deps={},agb=False):
+    new_params = {}
+    for k in a.keys():
+        if k in deps: # k has a dependency
+            assert deps[k] in new_params # making sure the thing we depend on is there :)
+        val_a = a[k]
+        val_b = b[k]
+        if isinstance(val_a, int):
+            new_params[k] = random.choice([val_a, val_b])
+            if k in deps:
+                dep_var = deps[k]
+                if a[dep_var] != b[dep_var]: # are the parrents different
+                    # whiich parent are we following?
+                    parentchoice_is_a = new_params[deps[k]] == a[deps[k]]
+                    new_params[k] = val_a if parentchoice_is_a else val_b
+        elif isinstance(val_a, float):
+            mean_val = random.choice([val_a, val_b])
+            new_params[k] =  np.mean((val_a,val_b)) if floatavg else mean_val#np.random.normal(mean_val, std_val)
+            if k in deps:
+                dep_var = deps[k]
+                if a[dep_var] != b[dep_var]: # are the parrents different
+                    parentchoice_is_a = new_params[deps[k]] == a[deps[k]]
+                    new_params[k] = val_a if parentchoice_is_a else val_b
+    return new_params
 
 def create_evaluation_function(n_int, m_float):
     """

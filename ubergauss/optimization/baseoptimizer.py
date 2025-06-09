@@ -23,6 +23,7 @@ class base():
         self.f = f
         self.data = data
         self.numsample = numsample
+        self.numsample_proc = numsample
         self.hyperband = hyperband
         if hyperband:
             self.numsample = numsample * 2**(len(hyperband))
@@ -55,20 +56,20 @@ class base():
             for (start,end) in self.hb_pairs(self.hyperband):
                 df2 = op.gridsearch(self.f, data_list = self.data[start:end],tasks = self.params)
                 df = pd.concat((df,df2))
+                lastparams = self.params.copy()
                 self.params, df = clean_params(self.params, df)
             self.df=df
+            self.params=lastparams
 
             # df2 = op.gridsearch(self.f, data_list = self.data[end:],tasks = self.params)
             # self.df = pd.concat((df,df2))
 
         if not self.hyperband:
             self.df = op.gridsearch(self.f, data_list = self.data,tasks = self.params)
+            self.df = fix(self.df)
 
-
-        self.df = fix(self.df)
         self.df = self.df.fillna(0)
-        self.df = self.df.sort_values(by='score', ascending=True)
-
+        self.df = self.df.sort_values(by='score', ascending=False)
         # save the run and get the next parameters
         self.runs.append(self.df)
         self.scores+=self.df.score.tolist()
@@ -87,7 +88,10 @@ class base():
         print('Best params:\n', best_run)
         plt.plot(scr.score.tolist())
         plt.show()
-        plot_params_with_hist(self.params, self.df, self.key_log)
+
+        plot_params_with_hist(self.params, self.df.iloc[:self.numsample_proc], self.key_log)
+        plot_term(self.params, self.df.iloc[:self.numsample_proc], self.key_log)
+
         # print best params
 
 
@@ -141,6 +145,41 @@ def plot_params_with_hist(params, df, log):
         plt.show()
 
 
+def plot_term(params, df, log):
+    print(f"{ len(df)=}")
+    #print(f"{ len(params)=}")
+    params = pd.DataFrame(params)
+
+
+    for col in params.columns:
+        if col == "score":
+            continue  # Skip the score column itself
+
+        print()
+        print(f"{col} {log.get(col,'')}")
+        so.scatter(df[col],df.score)
+        so.hist(params[col], bins = 20)
+
+
+        # fig.scatter(df[col], df.score, label='df data')
+
+        ## plotille..
+        #import plotille
+        #fig = plotille.Figure()
+        #fig.width = 60
+        #fig.height = 3
+        ##fig.set_x_limits(min_=-3, max_=3)
+        ##fig.set_y_limits(min_=-1, max_=1)
+        ##fig.color_mode = 'byte'
+        #fig.scatter(df[col], df.score, label='df data')
+        ## sns.histplot(params[col], ax=ax2, color='gray', alpha=0.3, bins=20, label='Distribution')
+        #v = params[col]
+        #y, X  = np.histogram(v,50)
+        #X = [np.mean(X[x:x+1]) for x in range(len(X)-1)]
+        #fig.scatter(X,y, label='params')
+        #print(fig.show(legend=True))
+
+
 
 def clean_params(params:dict, df:pd.DataFrame) -> tuple:
     '''
@@ -149,27 +188,24 @@ def clean_params(params:dict, df:pd.DataFrame) -> tuple:
     - then we return the the top scoring len(params)//2 rows as the new datadict (no score datafield and time)
     '''
 
-    # Identify columns that define a unique parameter combination
-    param_cols = [col for col in df.columns if col not in ['score', 'datafield' ,'time']]
+    # Param columns = keys of dict
+    param_cols = list(params[0].keys())
 
-    # Calculate the sum of scores for each parameter combination across all datafields
-    # The docstring says 'sum'
-    group_scores = df.groupby(param_cols)['score'].sum().reset_index()
+    # All other columns will be aggregated (sum)
+    agg_cols = [col for col in df.columns if col not in param_cols]
 
-    # Sort by score descending and select top 50%
-    # The docstring says len(params)//2. params is the original list of dicts passed in.
-    num_to_keep = len(params) // 2 if len(params) > 1 else len(params) # handle case where len(params) is 1
-    top_groups = group_scores.sort_values(by='score', ascending=False).head(num_to_keep)
+    # 1. Group and sum by param columns
+    grouped = df.groupby(param_cols)[agg_cols].sum().reset_index()
 
-    # Filter the original DataFrame to keep only rows corresponding to the top groups
-    filtered_df = df.merge(top_groups[param_cols], on=param_cols, how='inner')
+    # 2. Sort by score to pick top N
+    num_to_keep = max(1, len(params) // 2)
+    top_groups = grouped.sort_values(by='score', ascending=False).head(num_to_keep)
 
-    # Extract the parameter dictionaries from the top groups DataFrame
-    list_of_dicts = top_groups[param_cols].to_dict(orient='records')
+    # 3. Extract top param dicts
+    top_param_dicts = top_groups[param_cols].to_dict(orient='records')
 
-    print(f"{ len(filtered_df)=}")
-    print(f"{ len(list_of_dicts)=}")
-    return list_of_dicts, filtered_df
+    return top_param_dicts, grouped
+
 
 
 def clean_params_old(df: pd.DataFrame) -> tuple:

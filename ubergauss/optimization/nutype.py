@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from hyperopt.pyll.stochastic import sample as hypersample
 from ubergauss.optimization import baseoptimizer
+from sklearn import feature_selection
 '''
 for ints -> build a model cumsum(occcurance good / occurance bad) ,  then sample accoridngly
 for floats -> gaussian sample from the top 50% of the scores
@@ -18,21 +19,25 @@ class nutype(baseoptimizer.base):
         first the non dependants can be done as usual,
         then for the dependants, they need subsamplers , so a sampler returns a dict v:k... in the end i can combine all the dicts...
         '''
+
         if not hasattr(self, 'samplers'):
             self.samplers = [Sampler(self.space,p) for p in self.paramgroups]
-        if not hasattr(self, 'carry'):
-            self.carry = pd.DataFrame()
+
+        # if not hasattr(self, 'carry'):
+        #     self.carry = pd.DataFrame()
         # data = pd.concat((self.carry,self.df))
-        data = pd.concat((self.carry,self.df))
+        # data = pd.concat((self.carry,self.df))
+        # data = data.sort_values(by='score', ascending=False)
+
         for s in self.samplers:
             do, self.key_log[s.name] = check_col(self, s.name)
-            s.learn(data)
+            if do:
+                s.learn(self.df[:self.numsample_proc])
 
         self.params = [self.sample() for _ in range(self.numsample)]
 
-        c = int(self.numsample*.4)
-        data = data.sort_values(by='score', ascending=False)
-        self.carry = data.head(c).copy()
+        # c = int(self.numsample*.4)
+        # self.carry = data.head(c).copy()
 
 
     def sample(self):
@@ -85,8 +90,7 @@ class Simple():
 def mksampler(name,df,par):
     if par[0] == 'cat':
         return learn_cat_sampler(df.score,df[name])
-
-    df = df.tail(6)
+    df = df[:int(len(df)*.3)]
     if par[0] == 'float':
         return learn_float_sampler(df.score,df[name])
 
@@ -185,7 +189,7 @@ def learn_float_sampler(scores,values):
 
         flattened = [v for s, v in zip(weights, values) for _ in range(int(s))]
 
-        m,s = np.mean(flattened),np.std(flattened)
+        m,s = np.mean(flattened),np.std(flattened)*.5
         # print(f"{values,m,s=}")
 
         # print(f"{m=} {s=} {values=}")
@@ -195,27 +199,32 @@ def learn_float_sampler(scores,values):
 
 
 
-
-
 def check_col(optimizer, key):
     # for the key, we either cal shouldlearn
     # for floats and ints log will just be the normalized value,
     # for cat maybe the proba for each category
-
-
-    values = optimizer.df[key]
-    scores = optimizer.df.score
     param_type = optimizer.space.space[key][0]
+    df = optimizer.df
+    if param_type == 'cat':
+        return True, 'yes'
+
+    values = df[key]
+    scores = df.score.to_numpy()
 
     should = True
     log = None
 
     if param_type in ['float', 'int']:
-        values_reshaped = values.values.reshape(-1, 1)
-        log = should_learn_float(values_reshaped, scores.values)
+        values = values.values.reshape(-1, 1)
+        log = feature_selection.mutual_info_regression(values, scores, n_neighbors=2, discrete_features=False)#should_learn_float(values_reshaped, scores.values)
+        #log = feature_selection.mutual_info_classif(values, indicator, discrete_features=False)#should_learn_float(values_reshaped, scores.values)
+        return log[0] > .15, 'nice'
     elif param_type == 'cat':
         log = should_learn_cat(values, scores)
-
+        values = values.values.reshape(-1, 1)
+        indicator = scores > np.percentile(scores, .5)
+        #log += feature_selection.mutual_info_regression(values, scores,discrete_features=True)#should_learn_float(values_reshaped, scores.values)
+        log =(log, feature_selection.mutual_info_classif(values, indicator,n_neighbors=2,discrete_features=True))#should_learn_float(values_reshaped, scores.values)
     return should, log
 
 from sklearn.neighbors import NearestNeighbors
@@ -270,18 +279,17 @@ def should_learn_cat(x, y, percentile=50, direction='high'):
         success = y >= threshold
     else:  # 'low'
         success = y <= threshold
-
     df = pd.DataFrame({'x': x, 'success': success})
 
     # Group by category
     grouped = df.groupby('x')['success'].agg(['count', 'sum']).reset_index()
     grouped.columns = ['category', 'n', 'k']
-    print(f"{ grouped=}")
     grouped['p'] = (success.sum() / len(success))  # empirical success probability
     grouped['expected'] = grouped['n'] * grouped['p']
 
     # Compute binomial p-value (one-sided)
     def compute_pval(row):
+        return binom.sf(row.k, row.n, row.p)
         if direction == 'high':
             # Is k unusually high?
             return binom.sf(row.k - 1, row.n, row.p)
@@ -292,5 +300,6 @@ def should_learn_cat(x, y, percentile=50, direction='high'):
     grouped['p_value'] = grouped.apply(compute_pval, axis=1)
 
     grouped.pop('p')
+    grouped.pop('category')
     return grouped.sort_values('p_value')
 
