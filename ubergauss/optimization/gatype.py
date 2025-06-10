@@ -6,8 +6,7 @@ import seaborn as sns
 from hyperopt.pyll.stochastic import sample as hypersample
 from pprint import pprint
 '''
-for ints -> build a model cumsum(occcurance good / occurance bad) ,  then sample accoridngly
-for floats -> gaussian sample from the top 50% of the scores
+genetic optimizer
 '''
 import random
 from ubergauss.optimization import baseoptimizer
@@ -29,8 +28,9 @@ class nutype(baseoptimizer.base):
 
     def nuParams(self):
         select  = int(self.numsample*.4)
-        pool, weights = elitist_pool(self.runs, select)
-        # pool, weights = new_pool(self.runs, select)
+        # pool, weights = elitist_pool(self.runs, select)
+        # pool, weights = rando_pool(self.runs, select, self.space)
+        pool, weights = new_pool_soft(self.runs, select)
         # pool, weights = self.loose_pool()
         weights = weights / np.sum(weights)
         # recombine
@@ -54,7 +54,7 @@ class nutype(baseoptimizer.base):
             #     print(candidate)
 
 
-        new_params = [ self.mutate(p,1/(len(self.keyorder)+1)) for p in new_params]
+        new_params = [ self.mutate(p,1/(len(self.keyorder))) for p in new_params]
         self.params = new_params
 
     def mutate(self, p, proba):
@@ -103,7 +103,7 @@ def combine_classic(a, b, space=None):
 
     return new_params
 
-def new_pool(runs, numselect):
+def new_pool_hard(runs, numselect):
 
     if len(runs) == 1:
         old = pd.DataFrame()
@@ -111,15 +111,39 @@ def new_pool(runs, numselect):
         new = new.sort_values(by='score', ascending=False).head(numselect)
     else:
         new = runs[-1].copy()
-        new = new.sort_values(by='score', ascending=False).head(numselect//2)
+        newselect = int(numselect*.33)
+        new = new.sort_values(by='score', ascending=False).head(newselect)
         old = pd.concat(runs[:-1])
-        old = old.sort_values(by='score', ascending=False).head(numselect//2)
+        old = old.sort_values(by='score', ascending=False).head(numselect-newselect)
 
     dfdf = pd.concat((new, old))
     # print(dfdf)
     return df_to_params(dfdf)
 
+def new_pool_soft(runs, numselect, maxold = .66):
+    # hmm i dont even need to check the len runs :0 nice
 
+    n_combo = int(numselect*maxold)
+    combo = pd.concat(runs)
+    combo = combo.sort_values(by='score', ascending=False).head(n_combo)
+
+    final = pd.concat([combo, runs[-1]])
+    final = final.sort_values(by='score', ascending=False)
+    final = final.drop_duplicates().head(numselect)
+    return df_to_params(final)
+
+
+def rando_pool(runs, numselect, space):
+    # hmm i dont even need to check the len runs :0 nice
+
+    n_combo = int(numselect*.75)
+    combo = pd.concat(runs)
+    combo = combo.sort_values(by='score', ascending=False).head(n_combo)
+    print(combo)
+    params, scr = df_to_params(combo)
+    params +=    [space.sample() for x in range( numselect-n_combo) ]
+    scr = np.concatenate([scr, [min(scr)]*(numselect-n_combo)])
+    return params, scr
 
 def df_to_params(dfdf):
     # scores -= sorted.iloc[-5].score
@@ -138,7 +162,6 @@ def elitist_pool(runs, numselect):
     sorted = dfdf.sort_values(by='score', ascending=False)
     dfdf = sorted.head(numselect)
     # scores -= sorted.iloc[-5].score
-    print(dfdf)
     return df_to_params(dfdf)
 
 def fix_dataindex(df):
