@@ -29,17 +29,19 @@ class nutype(baseoptimizer.base):
 
     def nuParams(self):
         select  = int(self.numsample*.4)
-        # pool, weights = elitist_pool(self.runs, select)
-        pool, weights = new_pool(self.runs, select)
+        pool, weights = elitist_pool(self.runs, select)
+        # pool, weights = new_pool(self.runs, select)
         # pool, weights = self.loose_pool()
         weights = weights / np.sum(weights)
         # recombine
         new_params= []
         while len(new_params) < self.numsample:
             x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False, p=weights)
-            #x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False)
+            # x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False)
             # candidate = combine_aiming(pool[x],pool[y], weights[x] > weights[y], self.space)
             candidate =  combine(pool[x],pool[y], self.space)
+            # candidate =  combine_dependant(pool[x],pool[y],self.paramgroups, self.space)
+            # candidate =  combine_classic(pool[x],pool[y], self.space)
             if self.hashconfig(candidate) not in self.seen:
                 self.register([candidate])
                 new_params.append(candidate)
@@ -51,10 +53,8 @@ class nutype(baseoptimizer.base):
             #     print(pool[y])
             #     print(candidate)
 
-        #new_params = [sample() for _ in range(self.numsample)]
 
-        # mutate
-        new_params = [ self.mutate(p,.05) for p in new_params]
+        new_params = [ self.mutate(p,1/(len(self.keyorder)+1)) for p in new_params]
         self.params = new_params
 
     def mutate(self, p, proba):
@@ -65,6 +65,18 @@ class nutype(baseoptimizer.base):
         return p
 
 
+def avg_noise(a,b,key,space):
+    typ = space.space[key][0]
+    a,b = a[key], b[key]
+    new = np.mean([a,b])
+    new = np.random.normal(new, abs(a-b)*.5)
+    low, high = space.space[key][1][:2]
+    new = max(new,low)
+    new = min(high, new)
+    if typ == 'int':
+        new = int(new+.5)
+    return new
+
 def combine( a, b, space=None):
     new_params = {}
     for k in a.keys():
@@ -74,16 +86,22 @@ def combine( a, b, space=None):
         if typ == 'cat':
             new_params[k] = random.choice([val_b, val_a])
             continue
-        new = np.mean([val_b, val_a])
-        new = np.random.normal(new, abs(val_a - val_b)*.5)
-        low, high = space.space[k][1][:2]
-        new = max(new,low)
-        new = min(high, new)
-        if typ == 'int':
-            new = int(new+.5)
-        new_params[k] = new
+        new_params[k] = avg_noise(a,b,k,space)
     return new_params
 
+def combine_classic(a, b, space=None):
+    new_params = {}
+    keys = list(a.keys())
+    num_keys = len(keys)
+    crossover_point = random.randint(0, num_keys)
+
+    for i, key in enumerate(keys):
+        if i < crossover_point:
+            new_params[key] = a[key]
+        else:
+            new_params[key] = b[key]
+
+    return new_params
 
 def new_pool(runs, numselect):
 
@@ -92,12 +110,13 @@ def new_pool(runs, numselect):
         new = runs[0]
         new = new.sort_values(by='score', ascending=False).head(numselect)
     else:
-        new = runs[-1]
+        new = runs[-1].copy()
         new = new.sort_values(by='score', ascending=False).head(numselect//2)
         old = pd.concat(runs[:-1])
         old = old.sort_values(by='score', ascending=False).head(numselect//2)
 
     dfdf = pd.concat((new, old))
+    # print(dfdf)
     return df_to_params(dfdf)
 
 
@@ -107,7 +126,7 @@ def df_to_params(dfdf):
     scores =  dfdf.score
     dfdf = dfdf.drop(columns=['time', 'score', 'datafield'])
     pool = dfdf.to_dict(orient='records')
-    weights= np.argsort(np.array(scores))
+    weights= np.argsort(np.array(scores)) + 3
     return pool,weights # scores.tolist()
 
 
@@ -119,6 +138,7 @@ def elitist_pool(runs, numselect):
     sorted = dfdf.sort_values(by='score', ascending=False)
     dfdf = sorted.head(numselect)
     # scores -= sorted.iloc[-5].score
+    print(dfdf)
     return df_to_params(dfdf)
 
 def fix_dataindex(df):
@@ -175,16 +195,6 @@ def plot_params_with_hist(params, df):
 
 
 
-
-
-
-
-
-
-
-
-
-
 def combine_aiming( a, b, agb=False, space=None):
     new_params = {}
     for k in a.keys():
@@ -196,7 +206,7 @@ def combine_aiming( a, b, agb=False, space=None):
             new_params[k] = random.choice([better,good])
             continue
         #new =  (better+good)/2
-        new = np.random.normal(better, abs(better-good)*.5)
+        new = np.random.normal(better, abs(better-good))
         low, high = space.space[k][1][:2]
         new = max(new,low)
         new = min(high, new)
@@ -206,30 +216,21 @@ def combine_aiming( a, b, agb=False, space=None):
     return new_params
 
 
-def combine_dependant( a, b, floatavg = True, deps={},agb=False):
-    new_params = {}
-    for k in a.keys():
-        if k in deps: # k has a dependency
-            assert deps[k] in new_params # making sure the thing we depend on is there :)
-        val_a = a[k]
-        val_b = b[k]
-        if isinstance(val_a, int):
-            new_params[k] = random.choice([val_a, val_b])
-            if k in deps:
-                dep_var = deps[k]
-                if a[dep_var] != b[dep_var]: # are the parrents different
-                    # whiich parent are we following?
-                    parentchoice_is_a = new_params[deps[k]] == a[deps[k]]
-                    new_params[k] = val_a if parentchoice_is_a else val_b
-        elif isinstance(val_a, float):
-            mean_val = random.choice([val_a, val_b])
-            new_params[k] =  np.mean((val_a,val_b)) if floatavg else mean_val#np.random.normal(mean_val, std_val)
-            if k in deps:
-                dep_var = deps[k]
-                if a[dep_var] != b[dep_var]: # are the parrents different
-                    parentchoice_is_a = new_params[deps[k]] == a[deps[k]]
-                    new_params[k] = val_a if parentchoice_is_a else val_b
+def combine_dependant(a, b, paramgroups, space):
+    new_params = a.copy()
+    for  keys_in_group in paramgroups:
+        if random.random() < 0.5: # 50% chance to inherit from 'b'
+            for k in keys_in_group:
+                if k in new_params and k in b:
+                     new_params[k] = b[k]
+        k=keys_in_group[0]
+        if len(keys_in_group) == 1 and space.space[k][0] != 'cat':
+            new_params[k] = avg_noise(a,b,k,space)
+        elif len(keys_in_group) == 2 and a[k]==b[k]:
+            k2 = keys_in_group[1]
+            new_params[k2] = avg_noise(a,b,k2,space)
     return new_params
+
 
 def create_evaluation_function(n_int, m_float):
     """

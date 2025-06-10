@@ -29,6 +29,7 @@ class nutype(baseoptimizer.base):
         # data = pd.concat((self.carry,self.df))
         # data = data.sort_values(by='score', ascending=False)
 
+        print(self.df[:10])
         for s in self.samplers:
             do, self.key_log[s.name] = check_col(self, s.name)
             if do:
