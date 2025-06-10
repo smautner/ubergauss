@@ -28,16 +28,18 @@ class nutype(baseoptimizer.base):
 
     def nuParams(self):
         select  = int(self.numsample*.4)
+        pool, weights = new_pool_soft(self.runs, select, maxold=.5)
+        # pool, weights = tournament_usual(self.runs, select, 10)
+        # pool, weights = tournament(self.runs, select, int(self.numsample*2 / select + .5))
         # pool, weights = elitist_pool(self.runs, select)
         # pool, weights = rando_pool(self.runs, select, self.space)
-        pool, weights = new_pool_soft(self.runs, select)
         # pool, weights = self.loose_pool()
         weights = weights / np.sum(weights)
         # recombine
         new_params= []
         while len(new_params) < self.numsample:
-            x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False, p=weights)
-            # x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False)
+            # x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False, p=weights)
+            x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False)
             # candidate = combine_aiming(pool[x],pool[y], weights[x] > weights[y], self.space)
             candidate =  combine(pool[x],pool[y], self.space)
             # candidate =  combine_dependant(pool[x],pool[y],self.paramgroups, self.space)
@@ -103,22 +105,10 @@ def combine_classic(a, b, space=None):
 
     return new_params
 
-def new_pool_hard(runs, numselect):
 
-    if len(runs) == 1:
-        old = pd.DataFrame()
-        new = runs[0]
-        new = new.sort_values(by='score', ascending=False).head(numselect)
-    else:
-        new = runs[-1].copy()
-        newselect = int(numselect*.33)
-        new = new.sort_values(by='score', ascending=False).head(newselect)
-        old = pd.concat(runs[:-1])
-        old = old.sort_values(by='score', ascending=False).head(numselect-newselect)
 
-    dfdf = pd.concat((new, old))
-    # print(dfdf)
-    return df_to_params(dfdf)
+
+
 
 def new_pool_soft(runs, numselect, maxold = .66):
     # hmm i dont even need to check the len runs :0 nice
@@ -130,20 +120,10 @@ def new_pool_soft(runs, numselect, maxold = .66):
     final = pd.concat([combo, runs[-1]])
     final = final.sort_values(by='score', ascending=False)
     final = final.drop_duplicates().head(numselect)
+    print(final)
     return df_to_params(final)
 
 
-def rando_pool(runs, numselect, space):
-    # hmm i dont even need to check the len runs :0 nice
-
-    n_combo = int(numselect*.75)
-    combo = pd.concat(runs)
-    combo = combo.sort_values(by='score', ascending=False).head(n_combo)
-    print(combo)
-    params, scr = df_to_params(combo)
-    params +=    [space.sample() for x in range( numselect-n_combo) ]
-    scr = np.concatenate([scr, [min(scr)]*(numselect-n_combo)])
-    return params, scr
 
 def df_to_params(dfdf):
     # scores -= sorted.iloc[-5].score
@@ -162,7 +142,40 @@ def elitist_pool(runs, numselect):
     sorted = dfdf.sort_values(by='score', ascending=False)
     dfdf = sorted.head(numselect)
     # scores -= sorted.iloc[-5].score
+    print(dfdf)
     return df_to_params(dfdf)
+
+
+
+import random
+def tournament(runs, numselect, bestof = 8):
+    dfdf = pd.concat(runs[-2:])
+    dfdf = dfdf[dfdf.score > 0]
+    items = Zip(dfdf.score, Range(dfdf))
+    def select():
+        random.shuffle(items)
+        item = max(items[:8])
+        items.remove(item)
+        return item[1]
+    indices = [select() for i in range(numselect)]
+    dfdf = dfdf.iloc[indices]
+    print(dfdf)
+    return df_to_params(dfdf)
+
+def tournament_usual(runs, numselect, bestof = 8):
+    dfdf = pd.concat(runs)
+    dfdf = dfdf[dfdf.score > 0]
+    items = Zip(dfdf.score, Range(dfdf))
+    def select():
+        item = max(random.sample(items, bestof))
+        items.remove(item)
+        return item[1]
+    indices = [select() for i in range(numselect)]
+    dfdf = dfdf.iloc[indices]
+    print(dfdf)
+    return df_to_params(dfdf)
+
+
 
 def fix_dataindex(df):
     # Identify columns that define a unique parameter combination (all except 'score' and 'datafield')
