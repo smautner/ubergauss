@@ -54,7 +54,7 @@ class nutype(baseoptimizer.base):
             #     print(candidate)
 
 
-        new_params = [ self.mutate(p,1/(len(self.keyorder))) for p in new_params]
+        new_params = [ self.mutate(p,1/(len(self.keyorder)+1)) for p in new_params]
         self.params = new_params
 
     def mutate(self, p, proba):
