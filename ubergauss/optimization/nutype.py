@@ -29,7 +29,7 @@ class nutype(baseoptimizer.base):
         # data = pd.concat((self.carry,self.df))
         # data = data.sort_values(by='score', ascending=False)
 
-        print(self.df[:10])
+        print(self.df[:16])
         for s in self.samplers:
             do, self.key_log[s.name] = check_col(self, s.name)
             if do:
@@ -113,6 +113,7 @@ def learn_cat_sampler(scores, values):
     scores = np.array(scores)
     values = np.array(values)
     sorted_indices = np.argsort(scores)[::-1]
+
     top_40 = sorted_indices[:int(len(scores) * 0.4)]
     bottom_40 = sorted_indices[int(len(scores) * 0.6):]
 
@@ -130,7 +131,6 @@ def learn_cat_sampler(scores, values):
     # print(dict(zip(allints, scores)))
 
     # now we can make a cumsum of the scores, scale up a random.random and choose one of the scores
-
     cum_scores = np.cumsum(scores)
     total_score = cum_scores[-1]
     def sample():

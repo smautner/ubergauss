@@ -46,8 +46,6 @@ def gridsearch(func,data_list = None, *, param_dict = False, tasks = False, task
         - param_string: either valid options param:['option1','option2']
                                 or linspace param: 1 1.5 11
         - you could also use hyperopt.spaceship(string).sample() to sample tasks
-
-
     '''
 
     ############
@@ -66,7 +64,7 @@ def gridsearch(func,data_list = None, *, param_dict = False, tasks = False, task
         start = time.time()
         try:
             t.update(kwargs)
-            data = t.pop('datafield')
+            data = t.pop('data_id')
             res = func(*data_list[data],**t)
         except Exception as e:
             print(f"EXCEPTION:")
@@ -79,10 +77,10 @@ def gridsearch(func,data_list = None, *, param_dict = False, tasks = False, task
 
     def mktask(d,e):
         e=e.copy()
-        e['datafield'] = d
+        e['data_id'] = d
         return e
 
-    tasks = [ mktask(d,e) for d in range(len(data_list)) for e in tasks ]
+    tasks = [ mktask(d,e) for d in range(len(data_list)) for tid,e in enumerate(tasks) ]
 
     if mp:
         res = ut.xxmap(func2, tasks)
