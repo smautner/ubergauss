@@ -4,7 +4,10 @@ import pandas as pd
 import numpy as np
 from hyperopt.pyll.stochastic import sample as hypersample
 from ubergauss.optimization import baseoptimizer
+from sklearn.neighbors import NearestNeighbors
+from scipy.stats import binom
 from sklearn import feature_selection
+import random
 '''
 for ints -> build a model cumsum(occcurance good / occurance bad) ,  then sample accoridngly
 for floats -> gaussian sample from the top 50% of the scores
@@ -21,7 +24,7 @@ class nutype(baseoptimizer.base):
         '''
 
         if not hasattr(self, 'samplers'):
-            self.samplers = [Sampler(self.space,p) for p in self.paramgroups]
+            self.samplers = [mks(self.space,p[0]) for p in self.paramgroups]
 
         # if not hasattr(self, 'carry'):
         #     self.carry = pd.DataFrame()
@@ -29,12 +32,10 @@ class nutype(baseoptimizer.base):
         # data = pd.concat((self.carry,self.df))
         # data = data.sort_values(by='score', ascending=False)
 
-        print(self.df[:16])
+        print(self.df[:8])
         for s in self.samplers:
-            do, self.key_log[s.name] = check_col(self, s.name)
-            if do:
-                s.learn(self.df[:self.numsample_proc])
-
+            self.key_log[s.name] = s.update(self.runs)
+            print( self.key_log[s.name])
         self.params = [self.sample() for _ in range(self.numsample)]
 
         # c = int(self.numsample*.4)
@@ -48,67 +49,124 @@ class nutype(baseoptimizer.base):
         return d
 
 
-
-
-def Sampler(space, keys):
-    if len(keys) ==1:
-        return  Simple(space, keys[0])
-    else:
-        return  Samplerr(space, keys)
-
-class Samplerr():
-    def __init__(self, space, keys):
-        self.name = keys[0]
-        self.mainsampler = Simple(space,keys[0])
-        self.sub = {cat:Simple(space,keys[1]) for cat in space.space[keys[0]][1] }
-        # orig = partial(hypersample, spaceship.hoSpace[k])
-
-    def learn(self, df):
-        self.mainsampler.learn(df)
-        for e in self.sub:
-            df2 = df[df[self.name] == e]
-            if len(df2)>2:
-                self.sub[e].learn(df2)
-
-    def sample(self):
-        r = self.mainsampler.sample()
-
-        r.update(self.sub[list(r.values())[0]].sample())
-        return r
-
+def mks(space,key):
+    if space.space[key][0]=='cat':
+        return CS(space,key)
+    if space.space[key][0]=='float':
+        return FS(space,key)
+    if space.space[key][0]=='int':
+        return IS(space,key)
 class Simple():
     def __init__(self, space,key):
         self.name=key
         self.par = space.space[key]
         self.sample_f = partial(hypersample, space.hoSpace[key])
-
     def sample(self):
         return {self.name:self.sample_f()}
 
-    def learn(self,df):
-        self.sample_f = mksampler(self.name,df,self.par)
 
-def mksampler(name,df,par):
-    if par[0] == 'cat':
-        return learn_cat_sampler(df.score,df[name])
-    df = df[:int(len(df)*.3)]
-    if par[0] == 'float':
-        return learn_float_sampler(df.score,df[name])
 
-    if par[0] == 'int':
-        return learn_int_sampler(df.score,df[name],par[1])
 
-def learn_int_sampler(scores, values,par):
-    float_sampler = learn_float_sampler(scores,values)
-    def int_sampler():
-        while True:
-            v = int(float_sampler()+.5)
-            if par[0]<= v <= par[1]:
-                return v
-    return int_sampler
+
+class CS(Simple):
+    def update(self,runs):
+        df = runs[-1]
+        comment = p_values(df[self.name], df.score)
+        self.sample_f = partial(random.choice, [k for k,v in comment.items() if v < .7])
+        return comment
+
+def p_values(x, y):
+    x = np.asarray(x)
+    y = np.asarray(y)
+    success = y >= np.median(y)
+    overall_p = .5
+
+    # Compute p-value for each category
+    results = {}
+    for category in np.unique(x):
+        category_success = success[x == category]
+        n = len(category_success)
+        k = np.sum(category_success)
+        p_value = binom.sf(k, n, overall_p)
+        results[category] = p_value
+    return results
+
+
+
+class FS(Simple):
+    def update(self,runs):
+        df = runs[-1]
+        mutual_info = should_learn_float(df[self.name], df.score)
+        if mutual_info > .2:
+            self.sample_f = learn_float_sampler(df.score,df[self.name])
+        return mutual_info
+
+def should_learn_float(values, score):
+    scores = score.to_numpy()
+    values = values.values.reshape(-1, 1)
+    log = feature_selection.mutual_info_regression(values, scores, n_neighbors=2, discrete_features=False)
+    return log[0]
+
+def learn_float_sampler(scores,values):
+        scores = np.array(scores)
+        values = np.array(values)
+        weights = np.argsort(scores)
+        vals = [values[i] for i in weights[int(len(scores)*.4):]]
+
+        # return partial(np.random.uniform,np.min(vals)*.9,np.max(vals)*1.1)
+        return partial(np.random.normal,np.mean(vals),np.std(vals))
+        # return partial(np.random.normal,np.mean(vals),np.std(vals))
+        # flattened = [v for s, v in zip(weights, values) for _ in range(int(s))]
+        # m,s = np.mean(flattened),np.std(flattened)*.5
+
+class IS(Simple):
+    def update(self,runs):
+        '''
+        1. check if we need to update the sampler.
+        2. this will generate a comment that we might want to return
+        3. then we update the sampler if necessary
+        '''
+        df = runs[-1]
+        mutInfo = should_learn_float(df[self.name], df.score)
+        if mutInfo > .2:
+            sample_f = learn_float_sampler(df.score,df[self.name])
+
+            def int_sampler():
+                while True:
+                    v = int(sample_f()+.5)
+                    par = self.par[1]
+                    if par[0]<= v <= par[1]:
+                        return v
+            self.sample_f = int_sampler
+        return mutInfo
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def learn_cat_sampler(scores, values):
+    '''
+    this actually works nicely. looks at the worst and best instances and samples accordingly
+    '''
     # take top 40% and bottom 40%
     scores = np.array(scores)
     values = np.array(values)
@@ -139,98 +197,12 @@ def learn_cat_sampler(scores, values):
         return allints[chosen_index]
     return sample
 
-def need_sampler(scores,values):
-    # sort score and values by scores
-    # throw away the middle 20%
-    # then label topscores 1, bottomscores 0  -> y
-    #return sum(y == np.roll(y,-1))-2/len(y)
-    sv = Zip(scores,values)
-    scoresort = sorted(sv, key = lambda x:x[0])
-    p40 = int(len(sv)*.4)
-    score1 = [ (0,v) for s,v in scoresort[:p40] ]
-    score1+= [ (1,v) for s,v in scoresort[-p40:]]
-    valsort = sorted(score1, key = lambda x:x[1])
-    y = np.array([ii for ii,_ in valsort])
-    score = (np.sum(y == np.roll(y, -1)) -2) / (len(y)-2) # 2 misses are allowed :)
-    # 0 -> all the same  -> i shoudl resample
-    # 1 -> all different -> dont resample
-    return score
-
-def learn_float_sampler_old(scores,values):
-        scores = np.array(scores)
-        values = np.array(values)
-
-        sorted_indices = np.argsort(scores)[::-1]
-        topat = int(len(scores) * 0.4)
-        top_half = sorted_indices[:topat]
-        top_scores = scores[top_half]
-        top_values = values[top_half]
-
-        min_score = top_scores.min()
-        max_score = top_scores.max()
-        if max_score == min_score:
-            scaled_scores = np.full_like(top_scores, 100.0)
-        else:
-            scaled_scores = 100 * (top_scores - min_score) / (max_score - min_score)
-        flattened = [v for s, v in zip(scaled_scores, top_values) for _ in range(int(s))]
-
-        # flattened = top_values
-        m,s = np.mean(flattened),np.std(flattened)
-        # print(f"{m=} {s=} {values=}")
-        samples = lambda: np.random.normal(m,s)
-        # print mean and std
-        return samples
-
-
-def learn_float_sampler(scores,values):
-
-        scores = np.array(scores)
-        values = np.array(values)
-        weights = np.argsort(scores)
-
-        flattened = [v for s, v in zip(weights, values) for _ in range(int(s))]
-
-        m,s = np.mean(flattened),np.std(flattened)*.5
-        # print(f"{values,m,s=}")
-
-        # print(f"{m=} {s=} {values=}")
-        samples = lambda: np.random.normal(m,s)
-        # print mean and std
-        return samples
 
 
 
-def check_col(optimizer, key):
-    # for the key, we either cal shouldlearn
-    # for floats and ints log will just be the normalized value,
-    # for cat maybe the proba for each category
-    param_type = optimizer.space.space[key][0]
-    df = optimizer.df
-    if param_type == 'cat':
-        return True, 'yes'
 
-    values = df[key]
-    scores = df.score.to_numpy()
 
-    should = True
-    log = None
-
-    if param_type in ['float', 'int']:
-        values = values.values.reshape(-1, 1)
-        log = feature_selection.mutual_info_regression(values, scores, n_neighbors=2, discrete_features=False)#should_learn_float(values_reshaped, scores.values)
-        #log = feature_selection.mutual_info_classif(values, indicator, discrete_features=False)#should_learn_float(values_reshaped, scores.values)
-        return log[0] > .15, 'nice'
-    elif param_type == 'cat':
-        log = should_learn_cat(values, scores)
-        values = values.values.reshape(-1, 1)
-        indicator = scores > np.percentile(scores, .5)
-        #log += feature_selection.mutual_info_regression(values, scores,discrete_features=True)#should_learn_float(values_reshaped, scores.values)
-        log =(log, feature_selection.mutual_info_classif(values, indicator,n_neighbors=2,discrete_features=True))#should_learn_float(values_reshaped, scores.values)
-    return should, log
-
-from sklearn.neighbors import NearestNeighbors
-
-def should_learn_float(x, y, n_neighbors=1):
+def should_learn_float_old(x, y, n_neighbors=1):
     """
     Predicts y using average of y-values of nearest neighbors in x,
     and returns the normalized prediction error.
@@ -258,49 +230,78 @@ def should_learn_float(x, y, n_neighbors=1):
 
     return normalized_error
 
-from scipy.stats import binom
 
-def should_learn_cat(x, y, percentile=50, direction='high'):
-    """
-    Evaluate how each category in x performs in predicting high/low values of y.
 
-    Parameters:
-    - x: array-like (categorical)
-    - y: array-like (numeric target)
-    - percentile: int (e.g., 90 means top 10% of y are 'successes')
-    - direction: 'low' or 'high' — detect underperformance or overperformance
 
-    Returns:
-    - DataFrame with columns: [category, count, successes, expected_successes, p_value]
-    """
 
-    # Define success threshold
-    threshold = np.percentile(y, percentile)
-    if direction == 'high':
-        success = y >= threshold
-    else:  # 'low'
-        success = y <= threshold
-    df = pd.DataFrame({'x': x, 'success': success})
-
-    # Group by category
-    grouped = df.groupby('x')['success'].agg(['count', 'sum']).reset_index()
-    grouped.columns = ['category', 'n', 'k']
-    grouped['p'] = (success.sum() / len(success))  # empirical success probability
-    grouped['expected'] = grouped['n'] * grouped['p']
-
-    # Compute binomial p-value (one-sided)
-    def compute_pval(row):
-        return binom.sf(row.k, row.n, row.p)
-        if direction == 'high':
-            # Is k unusually high?
-            return binom.sf(row.k - 1, row.n, row.p)
+def learn_float_sampler_old(scores,values):
+        scores = np.array(scores)
+        values = np.array(values)
+        sorted_indices = np.argsort(scores)[::-1]
+        topat = int(len(scores) * 0.4)
+        top_half = sorted_indices[:topat]
+        top_scores = scores[top_half]
+        top_values = values[top_half]
+        min_score = top_scores.min()
+        max_score = top_scores.max()
+        if max_score == min_score:
+            scaled_scores = np.full_like(top_scores, 100.0)
         else:
-            # Is k unusually low?
-            return binom.cdf(row.k, row.n, row.p)
+            scaled_scores = 100 * (top_scores - min_score) / (max_score - min_score)
+        flattened = [v for s, v in zip(scaled_scores, top_values) for _ in range(int(s))]
+        # flattened = top_values
+        m,s = np.mean(flattened),np.std(flattened)
+        # print(f"{m=} {s=} {values=}")
+        samples = lambda: np.random.normal(m,s)
+        # print mean and std
+        return samples
 
-    grouped['p_value'] = grouped.apply(compute_pval, axis=1)
 
-    grouped.pop('p')
-    grouped.pop('category')
-    return grouped.sort_values('p_value')
+def need_sampler(scores,values):
+    '''
+    this was my ring checker
+    '''
+    # sort score and values by scores
+    # throw away the middle 20%
+    # then label topscores 1, bottomscores 0  -> y
+    #return sum(y == np.roll(y,-1))-2/len(y)
+    sv = Zip(scores,values)
+    scoresort = sorted(sv, key = lambda x:x[0])
+    p40 = int(len(sv)*.4)
+    score1 = [ (0,v) for s,v in scoresort[:p40] ]
+    score1+= [ (1,v) for s,v in scoresort[-p40:]]
+    valsort = sorted(score1, key = lambda x:x[1])
+    y = np.array([ii for ii,_ in valsort])
+    score = (np.sum(y == np.roll(y, -1)) -2) / (len(y)-2) # 2 misses are allowed :)
+    # 0 -> all the same  -> i shoudl resample
+    # 1 -> all different -> dont resample
+    return score
 
+
+class Samplerr():
+    def __init__(self, space, keys):
+        self.name = keys[0]
+        self.mainsampler = Simple(space,keys[0])
+        self.sub = {cat:Simple(space,keys[1]) for cat in space.space[keys[0]][1] }
+        # orig = partial(hypersample, spaceship.hoSpace[k])
+
+    def learn(self, df):
+        self.mainsampler.learn(df)
+        for e in self.sub:
+            df2 = df[df[self.name] == e]
+            if len(df2)>2:
+                self.sub[e].learn(df2)
+
+    def sample(self):
+        r = self.mainsampler.sample()
+
+        r.update(self.sub[list(r.values())[0]].sample())
+        return r
+
+
+
+def Sampler(space, keys):
+    if len(keys) ==1:
+        return  Simple(space, keys[0])
+    else:
+        return  Samplerr(space, keys)
