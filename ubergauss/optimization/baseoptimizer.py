@@ -171,7 +171,8 @@ def plot_term(params, df, log):
 
         print()
         print(f"{col} {log.get(col,'')}")
-        so.scatter(df[col],df.score)
-        so.hist(params[col], bins = 20)
+        so.scatter(df[col],df.score, columns = 16)
+        xlim = min(df[col]), max(df[col])
+        so.hist(params[col], bins = 16, xlim = xlim)
 
 

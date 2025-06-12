@@ -29,6 +29,7 @@ class nutype(baseoptimizer.base):
     def nuParams(self):
         select  = int(self.numsample*.5)
         pool, weights = new_pool_soft(self.runs, select, maxold=.4)
+        # pool, weights = clusterpool(self.runs,self.space, select)
         # pool, weights = tournament_usual(self.runs, select, 10)
         # pool, weights = tournament(self.runs, select, 5)
         # pool, weights = elitist_pool(self.runs, select)
@@ -141,6 +142,115 @@ def elitist_pool(runs, numselect):
     dfdf = sorted.head(numselect)
     # scores -= sorted.iloc[-5].score
     return df_to_params(dfdf)
+
+
+
+
+
+
+
+
+
+def clusterpool(runs,space,num_parents):
+    # 1. make a copy of df and pop data_id time and score
+    df = pd.concat(runs)
+    df_clean = df.copy()
+    cols_to_drop = ['time', 'config_id', 'score']
+    df_clean = df_clean.drop(columns=cols_to_drop)
+    # 2. vectorize
+    param_dicts = df_clean.to_dict(orient='records')
+    categorical_keys = [k for k, v in space.space.items() if v[0] == 'cat']
+    vectors = vectorize_parameters(param_dicts, categorical_keys)
+    # 3. select instances based on clusters and fitness
+    scores = df['score'].tolist()
+    selected_indices = select_parents_by_cluster_fitness(vectors, scores, num_parents)
+    # 5. Filter the original df and call df_to_params
+    selected_df = df.iloc[selected_indices].copy()
+    return df_to_params(selected_df)
+
+
+from sklearn.preprocessing import OneHotEncoder
+
+def vectorize_parameters(param_dicts, categorical_keys):
+    numeric_features = []
+    categorical_features = []
+    for d in param_dicts:
+        numeric_features.append([v for k, v in d.items() if k not in categorical_keys])
+        categorical_features.append([d[k] for k in categorical_keys])
+    encoder = OneHotEncoder(sparse=False, handle_unknown='ignore')
+    categorical_encoded = encoder.fit_transform(categorical_features)
+    X = np.hstack([numeric_features, categorical_encoded])
+
+    # Column-wise min-max scaling of the entire matrix
+    min_vals = X.min(axis=0)
+    max_vals = X.max(axis=0)
+    ranges = max_vals - min_vals
+    ranges[ranges == 0] = 1  # Prevent divide-by-zero
+    X = (X - min_vals) / ranges
+
+    return X
+
+
+from sklearn.cluster import KMeans
+from scipy.stats import rankdata
+def select_parents_by_cluster_fitness(vectors, scores, num_parents, num_clusters=2):
+    kmeans = KMeans(n_clusters=num_clusters, n_init=10, random_state=42)
+    labels = kmeans.fit_predict(vectors)
+
+    scores = np.array(scores)
+    scores = (scores - scores.min()) / (scores.max() - scores.min())
+
+    selected_ids = []
+
+    cluster_means = []
+    for c in range(num_clusters):
+        idxs = np.where(labels == c)[0]
+        cluster_score = scores[idxs].mean()
+        cluster_means.append((c, cluster_score))
+
+    # Rank the cluster means (higher score → higher rank)
+
+    cluster_scores_only = [s for _, s in cluster_means]
+    ranks = rankdata(cluster_scores_only, method="average")  # lowest=1, highest=n
+    ranks = ranks **2
+    normalized_ranks = ranks/sum(ranks) #(ranks - 1) / (len(ranks) - 1)  # scale to [0, 1]
+
+    # Convert to proportions
+    proportions = [(c, r) for (c, _), r in zip(cluster_means, normalized_ranks)]
+
+    for c, prop in proportions:
+        # Determine how many parents to select from this cluster
+        cluster_idxs = np.where(labels == c)[0]
+        cluster_scores = scores[cluster_idxs]
+        num_from_cluster = max(1, int(round(prop * num_parents)))
+
+        # Select top individuals in cluster
+        top_idxs = cluster_idxs[np.argsort(cluster_scores)[-num_from_cluster:]]
+        print(f"{ len(top_idxs)=}")
+        selected_ids.extend(top_idxs.tolist())
+
+    # If rounding caused fewer than requested, fill in with next best
+    if len(selected_ids) < num_parents:
+        all_remaining = list(set(range(len(scores))) - set(selected_ids))
+        top_up = sorted(all_remaining, key=lambda i: scores[i], reverse=True)[:(num_parents - len(selected_ids))]
+        selected_ids.extend(top_up)
+
+    return selected_ids[:num_parents]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
