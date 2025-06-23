@@ -59,7 +59,9 @@ class base():
         if self.hyperband:
             df = pd.DataFrame()
             for (start,end) in self.hb_pairs(self.hyperband):
-                df2 = op.gridsearch(self.f, data_list = self.data[start:end],tasks = self.params)
+                df2 = op.gridsearch(self.f,
+                                    data_list = self.data[start:end],
+                                    tasks = self.params)
                 df = pd.concat((df,df2))
                 lastparams = self.params.copy()
                 self.params, df = clean_params(self.params, df) #
@@ -70,7 +72,10 @@ class base():
             # self.df = pd.concat((df,df2))
 
         if not self.hyperband:
-            self.df = op.gridsearch(self.f, data_list = self.data,tasks = self.params)
+            self.df = op.gridsearch(self.f,
+                                    data_list = self.data,
+                                    tasks = self.params,
+                                    mp= True)
             self.df = fix(self.df)
 
         self.df = self.df.fillna(0)

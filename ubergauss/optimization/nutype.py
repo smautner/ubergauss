@@ -9,8 +9,10 @@ from scipy.stats import binom
 from sklearn import feature_selection
 import random
 '''
-for ints -> build a model cumsum(occcurance good / occurance bad) ,  then sample accoridngly
-for floats -> gaussian sample from the top 50% of the scores
+basically TPE style optimization per parameter vs score.
+distributions are updated after a test is passed:
+    - i remove categoricals base on p-values
+    - mutual info threshold for continuous variables
 '''
 
 
@@ -72,7 +74,7 @@ class CS(Simple):
     def update(self,runs):
         df = runs[-1]
         comment = p_values(df[self.name], df.score)
-        self.sample_f = partial(random.choice, [k for k,v in comment.items() if v < .7])
+        self.sample_f = partial(random.choice, [k for k,v in comment.items() if v < .85])
         return comment
 
 def p_values(x, y):
@@ -98,7 +100,11 @@ class FS(Simple):
         df = runs[-1]
         mutual_info = should_learn_float(df[self.name], df.score)
         if mutual_info > .2:
-            self.sample_f = learn_float_sampler(df.score,df[self.name])
+            top = .5
+            if mutual_info > .3: top -= .1
+            if mutual_info > .4: top -= .1
+            if mutual_info > .5: top -= .1
+            self.sample_f = learn_float_sampler(df.score,df[self.name], learntop = top)
         return mutual_info
 
 def should_learn_float(values, score):
@@ -107,11 +113,11 @@ def should_learn_float(values, score):
     log = feature_selection.mutual_info_regression(values, scores, n_neighbors=2, discrete_features=False)
     return log[0]
 
-def learn_float_sampler(scores,values):
+def learn_float_sampler(scores,values,learntop=.4):
         scores = np.array(scores)
         values = np.array(values)
         weights = np.argsort(scores)
-        vals = [values[i] for i in weights[int(len(scores)*.4):]]
+        vals = [values[i] for i in weights[int(len(scores)*learntop):]]
 
         # return partial(np.random.uniform,np.min(vals)*.9,np.max(vals)*1.1)
         return partial(np.random.normal,np.mean(vals),np.std(vals))

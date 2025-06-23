@@ -6,7 +6,7 @@ import seaborn as sns
 from hyperopt.pyll.stochastic import sample as hypersample
 from pprint import pprint
 '''
-genetic optimizer
+genetic optimization algorithm
 '''
 import random
 from ubergauss.optimization import baseoptimizer
@@ -30,11 +30,10 @@ class nutype(baseoptimizer.base):
         select  = int(self.numsample*.5)
         pool, weights = new_pool_soft(self.runs, select, maxold=.4)
         # pool, weights = clusterpool(self.runs,self.space, select)
-        # pool, weights = tournament_usual(self.runs, select, 10)
-        # pool, weights = tournament(self.runs, select, 5)
         # pool, weights = elitist_pool(self.runs, select)
-        # pool, weights = rando_pool(self.runs, select, self.space)
-        # pool, weights = self.loose_pool()
+        # pool, weights = tournament(self.runs,select)
+        # pool, weights = toprando(self.runs,select)
+        # pool, weights = expo_select(self.runs,select)
         weights = weights / np.sum(weights)
         # recombine
         new_params= []
@@ -80,8 +79,9 @@ def df_to_params(dfdf):
 def avg_noise(a,b,key,space):
     typ = space.space[key][0]
     a,b = a[key], b[key]
-    new = np.mean([a,b])
-    std = abs(a-b)*.7
+    new = random.choice([a,b])
+    # new = np.mean([a,b])
+    std = abs(a-b)*.3
     if typ == 'int':
         std = max(std, .5)
     new = np.random.normal(new, std)
@@ -117,20 +117,42 @@ def combine_classic(a, b, space=None):
     return new_params
 
 
-
-
 def new_pool_soft(runs, numselect, maxold = .66):
     # hmm i dont even need to check the len runs :0 nice
-
+    # 1. select the best of the best
     n_combo = int(numselect*maxold)
     combo = pd.concat(runs)
     combo = combo.sort_values(by='score', ascending=False).head(n_combo)
-
+    # 2. concatenate with newest, sort, remove duplicates and head
     final = pd.concat([combo, runs[-1]])
     final = final.sort_values(by='score', ascending=False)
     final = final.drop_duplicates().head(numselect)
     return df_to_params(final)
 
+# def new_and_clusters(runs, numselect, space):
+#     combo = pd.concat(runs)
+#     # combo = combo.sort_values(by='score', ascending=False).head(n_combo)
+#     vectors = df_to_vec(combo,space)
+#     # 3. select instances based on clusters and fitness
+#     selected_indices = select_parents_by_cluster_fitness(vectors,
+#                                                          combo['score'].tolist(),
+#                                                          int(numselect*.66))
+#     final = pd.concat([combo, runs[-1]])
+#     final = final.sort_values(by='score', ascending=False)
+#     final = final.drop_duplicates().head(numselect)
+#     return df_to_params(final)
+
+
+def clusterpool(runs,space,num_parents):
+    # 1. make a copy of df and pop data_id time and score
+    df = pd.concat(runs)
+    vectors = df_to_vec(df,space)
+    # 3. select instances based on clusters and fitness
+    scores = df['score'].tolist()
+    selected_indices = select_parents_by_cluster_fitness(vectors, scores, num_parents)
+    # 5. Filter the original df and call df_to_params
+    selected_df = df.iloc[selected_indices].copy()
+    return df_to_params(selected_df)
 
 
 def elitist_pool(runs, numselect):
@@ -145,31 +167,58 @@ def elitist_pool(runs, numselect):
 
 
 
+def expo_select(runs, num_select):
+    df= pd.concat(runs)
+    scores = df.score
+    probabilities = scores**10 / np.sum(scores**10)
+    selected_indices = np.random.choice(df.index, size=num_select, replace=False, p=probabilities)
+    print(selected_indices)
+    dfdf= df.iloc[selected_indices]
+    return df_to_params(dfdf)
+
+def toprando(runs,numselect):
+    dfdf = pd.concat(runs)
+    # len(runs)+1 * numselect *
+    if len(runs) ==1:
+        dfdf = dfdf.nlargest(numselect,'score')
+    else:
+        dfdf = dfdf.nlargest(numselect*3,'score')
+    return df_to_params(dfdf)
+
+def tournament(runs, numselect):
+
+    dfdf = pd.concat(runs)
+    dfdf = dfdf[dfdf.score > 0]
+    bestof = len(dfdf)//numselect
+    bestof = max(2,bestof)
+
+    items = Zip(dfdf.score, Range(dfdf))
+    def select():
+        item = max(random.sample(items, bestof))
+        items.remove(item)
+        return item[1]
+    indices = [select() for i in range(numselect)]
+    dfdf = dfdf.iloc[indices]
+    return df_to_params(dfdf)
 
 
 
 
 
-
-def clusterpool(runs,space,num_parents):
-    # 1. make a copy of df and pop data_id time and score
-    df = pd.concat(runs)
+from sklearn.preprocessing import OneHotEncoder
+def df_to_vec(df,space):
+    '''
+    clean and vectorize
+    '''
     df_clean = df.copy()
     cols_to_drop = ['time', 'config_id', 'score']
     df_clean = df_clean.drop(columns=cols_to_drop)
     # 2. vectorize
     param_dicts = df_clean.to_dict(orient='records')
     categorical_keys = [k for k, v in space.space.items() if v[0] == 'cat']
-    vectors = vectorize_parameters(param_dicts, categorical_keys)
-    # 3. select instances based on clusters and fitness
-    scores = df['score'].tolist()
-    selected_indices = select_parents_by_cluster_fitness(vectors, scores, num_parents)
-    # 5. Filter the original df and call df_to_params
-    selected_df = df.iloc[selected_indices].copy()
-    return df_to_params(selected_df)
+    return vectorize_parameters(param_dicts, categorical_keys)
 
 
-from sklearn.preprocessing import OneHotEncoder
 
 def vectorize_parameters(param_dicts, categorical_keys):
     numeric_features = []
@@ -193,7 +242,7 @@ def vectorize_parameters(param_dicts, categorical_keys):
 
 from sklearn.cluster import KMeans
 from scipy.stats import rankdata
-def select_parents_by_cluster_fitness(vectors, scores, num_parents, num_clusters=2):
+def select_parents_by_cluster_fitness(vectors, scores, num_parents, num_clusters=3):
     kmeans = KMeans(n_clusters=num_clusters, n_init=10, random_state=42)
     labels = kmeans.fit_predict(vectors)
 
@@ -212,14 +261,17 @@ def select_parents_by_cluster_fitness(vectors, scores, num_parents, num_clusters
 
     cluster_scores_only = [s for _, s in cluster_means]
     ranks = rankdata(cluster_scores_only, method="average")  # lowest=1, highest=n
-    ranks = ranks **2
+    ranks = np.array([  r > 1 for r in ranks ])
+    # ranks = ranks **2
     normalized_ranks = ranks/sum(ranks) #(ranks - 1) / (len(ranks) - 1)  # scale to [0, 1]
 
     # Convert to proportions
     proportions = [(c, r) for (c, _), r in zip(cluster_means, normalized_ranks)]
+    # print(f"{ proportions=}")
 
     for c, prop in proportions:
         # Determine how many parents to select from this cluster
+        if prop < .0001: continue
         cluster_idxs = np.where(labels == c)[0]
         cluster_scores = scores[cluster_idxs]
         num_from_cluster = max(1, int(round(prop * num_parents)))
@@ -239,47 +291,6 @@ def select_parents_by_cluster_fitness(vectors, scores, num_parents, num_clusters
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def tournament(runs, numselect, bestof = 8):
-
-    dfdf = pd.concat(runs).sort_values(by='score', ascending=False).head(len(runs[-1])*2)
-    dfdf = dfdf[dfdf.score > 0]
-
-    items = Zip(dfdf.score, Range(dfdf))
-    def select():
-        random.shuffle(items)
-        item = max(items[:8])
-        items.remove(item)
-        return item[1]
-    indices = [select() for i in range(numselect)]
-    dfdf = dfdf.iloc[indices]
-    return df_to_params(dfdf)
-
-def tournament_usual(runs, numselect, bestof = 8):
-    dfdf = pd.concat(runs)
-    dfdf = dfdf[dfdf.score > 0]
-    items = Zip(dfdf.score, Range(dfdf))
-    def select():
-        item = max(random.sample(items, bestof))
-        items.remove(item)
-        return item[1]
-    indices = [select() for i in range(numselect)]
-    dfdf = dfdf.iloc[indices]
-    return df_to_params(dfdf)
 
 
 def combine_aiming( a, b, agb=False, space=None):

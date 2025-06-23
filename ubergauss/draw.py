@@ -141,3 +141,46 @@ if __name__ == "__main__":
     boxplot([1,2,3,4,5,6,7,7,100])
     plt.show()
 
+
+import matplotlib.pyplot as plt
+from matplotlib.colors import Normalize
+
+def binned_pairplot(df, score = 'score', bins= 15):
+
+    g = sns.PairGrid(df)
+
+    # Function to bin and average hue
+    def binned_avg_hue(x, y, hue, bins=bins, **kwargs):
+        if len(x) < 2: return
+
+        # 2D histogram binning
+        df = pd.DataFrame({'x': x, 'y': y, 'hue': hue})
+        xbins = np.linspace(x.min(), x.max(), bins)
+        ybins = np.linspace(y.min(), y.max(), bins)
+
+        df['x_bin'] = np.digitize(df['x'], xbins)
+        df['y_bin'] = np.digitize(df['y'], ybins)
+
+        grouped = df.groupby(['x_bin', 'y_bin'])['hue'].mean().reset_index()
+
+        # Convert bin indexes to bin centers
+        grouped['x'] = xbins[grouped['x_bin'] - 1]
+        grouped['y'] = ybins[grouped['y_bin'] - 1]
+
+        # Normalize hue to [0,1] for colormap
+        norm = Normalize(vmin=hue.min(), vmax=hue.max())
+        plt.scatter(grouped['x'], grouped['y'], c=grouped['hue'], cmap='viridis', norm=norm, s=50)
+
+    # Apply to lower triangle
+    g.map_lower(lambda x, y, **kwargs: binned_avg_hue(x, y, df[score], **kwargs))
+
+    # Optional: diagonal and upper
+    g.map_diag(sns.histplot)
+    g.map_upper(sns.scatterplot, hue=df[score])
+    plt.colorbar()
+    plt.show()
+
+
+
+
+
