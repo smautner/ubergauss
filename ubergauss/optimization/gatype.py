@@ -28,7 +28,7 @@ class nutype(baseoptimizer.base):
 
     def nuParams(self):
         select  = int(self.numsample*.5)
-        pool, weights = new_pool_soft(self.runs, select, maxold=.4)
+        pool, weights = df_to_params(new_pool_soft(self.runs, select, maxold=.4), prin=False)
         # pool, weights = clusterpool(self.runs,self.space, select)
         # pool, weights = elitist_pool(self.runs, select)
         # pool, weights = tournament(self.runs,select)
@@ -67,9 +67,10 @@ class nutype(baseoptimizer.base):
                 p[k] = hypersample(self.space.hoSpace[k])
         return p
 
-def df_to_params(dfdf):
+def df_to_params(dfdf, prin=False):
     # scores -= sorted.iloc[-5].score
-    print(dfdf)
+    if prin:
+        print(dfdf)
     scores =  dfdf.score
     dfdf = dfdf.drop(columns=['time', 'score','config_id'])
     pool = dfdf.to_dict(orient='records')
@@ -83,7 +84,7 @@ def avg_noise(a,b,key,space):
     # new = np.mean([a,b])
     std = abs(a-b)*.3
     if typ == 'int':
-        std = max(std, .5)
+        std = max(std, .3)
     new = np.random.normal(new, std)
     low, high = space.space[key][1][:2]
     new = max(new,low)
@@ -127,7 +128,7 @@ def new_pool_soft(runs, numselect, maxold = .66):
     final = pd.concat([combo, runs[-1]])
     final = final.sort_values(by='score', ascending=False)
     final = final.drop_duplicates().head(numselect)
-    return df_to_params(final)
+    return final
 
 # def new_and_clusters(runs, numselect, space):
 #     combo = pd.concat(runs)
@@ -152,7 +153,7 @@ def clusterpool(runs,space,num_parents):
     selected_indices = select_parents_by_cluster_fitness(vectors, scores, num_parents)
     # 5. Filter the original df and call df_to_params
     selected_df = df.iloc[selected_indices].copy()
-    return df_to_params(selected_df)
+    return selected_df
 
 
 def elitist_pool(runs, numselect):
@@ -163,7 +164,7 @@ def elitist_pool(runs, numselect):
     sorted = dfdf.sort_values(by='score', ascending=False)
     dfdf = sorted.head(numselect)
     # scores -= sorted.iloc[-5].score
-    return df_to_params(dfdf)
+    return dfdf
 
 
 
@@ -172,9 +173,9 @@ def expo_select(runs, num_select):
     scores = df.score
     probabilities = scores**10 / np.sum(scores**10)
     selected_indices = np.random.choice(df.index, size=num_select, replace=False, p=probabilities)
-    print(selected_indices)
+    # print(selected_indices)
     dfdf= df.iloc[selected_indices]
-    return df_to_params(dfdf)
+    return dfdf
 
 def toprando(runs,numselect):
     dfdf = pd.concat(runs)
@@ -183,7 +184,7 @@ def toprando(runs,numselect):
         dfdf = dfdf.nlargest(numselect,'score')
     else:
         dfdf = dfdf.nlargest(numselect*3,'score')
-    return df_to_params(dfdf)
+    return dfdf
 
 def tournament(runs, numselect):
 
@@ -199,7 +200,7 @@ def tournament(runs, numselect):
         return item[1]
     indices = [select() for i in range(numselect)]
     dfdf = dfdf.iloc[indices]
-    return df_to_params(dfdf)
+    return dfdf
 
 
 

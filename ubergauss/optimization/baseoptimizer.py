@@ -61,7 +61,7 @@ class base():
             for (start,end) in self.hb_pairs(self.hyperband):
                 df2 = op.gridsearch(self.f,
                                     data_list = self.data[start:end],
-                                    tasks = self.params)
+                                    tasks =self.params)
                 df = pd.concat((df,df2))
                 lastparams = self.params.copy()
                 self.params, df = clean_params(self.params, df) #
@@ -74,7 +74,7 @@ class base():
         if not self.hyperband:
             self.df = op.gridsearch(self.f,
                                     data_list = self.data,
-                                    tasks = self.params,
+                                    tasks =self.params,
                                     mp= True)
             self.df = fix(self.df)
 
@@ -96,13 +96,14 @@ class base():
         so.lprint(scr.score)
         best_run = scr.sort_values(by='score', ascending=False).iloc[0]
         print('Best params:\n', best_run)
+
+    def print_more(self):
+        scr = pd.concat(self.runs)
         plt.plot(scr.score.tolist())
         plt.show()
-
         plot_params_with_hist(self.params, self.df.iloc[:self.numsample_proc], self.key_log)
         plot_term(self.params, self.df.iloc[:self.numsample_proc], self.key_log)
 
-        # print best params
 
 
 def fix(df):
