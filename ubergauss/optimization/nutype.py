@@ -37,7 +37,7 @@ class nutype(baseoptimizer.base):
         print(self.df[:8])
         for s in self.samplers:
             self.key_log[s.name] = s.update(self.runs)
-            print( self.key_log[s.name])
+            print(s.name, self.key_log[s.name])
         self.params = [self.sample() for _ in range(self.numsample)]
 
         # c = int(self.numsample*.4)
@@ -70,19 +70,99 @@ class Simple():
 
 
 
+# choices = ['apple', 'banana', 'cherry']
+# weights = [0.1, 0.2, 0.7] # Probabilities for each choice
+# chosen_item = random.choices(choices, weights, k=1)
+
 class CS(Simple):
     def update(self,runs):
-        df = runs[-1]
-        comment = p_values(df[self.name], df.score)
-        self.sample_f = partial(random.choice, [k for k,v in comment.items() if v < .85])
+        # df = runs[-1]
+        # comment = p_values(df[self.name], df.score)
+        # comment = p_values_allruns(runs, self.name)
+        comment = p_values_allruns(runs, self.name)
+        # self.sample_f = partial(random.choice, [k for k,v in comment.items() if v < .9])
+        self.sample_f = partial(choice, comment)
         return comment
+
+def choice(p_dict):
+    return random.choices(list(p_dict.keys()), weights=[ 1- v for v in p_dict.values()], k=1)[0]
+
+
+
+def p_values_allruns_alternative(runs, cat):
+    """
+    Alternative to p_values_allruns: ranks instances implicitly, then for each
+    instance compares its score to a random instance from a different category,
+    counting wins across all datasets.
+    """
+    category_wins = {}
+    category_trials = {}
+
+    for df in runs:
+        if df.empty:
+            continue
+
+        unique_categories = df[cat].unique()
+
+        for current_cat_value in unique_categories:
+            current_category_df = df[df[cat] == current_cat_value]
+            other_categories_df = df[df[cat] != current_cat_value]
+
+            if current_category_df.empty or other_categories_df.empty:
+                # Cannot make a meaningful comparison if either group is empty
+                continue
+
+            wins_for_this_cat_in_run = 0
+            trials_for_this_cat_in_run = 0
+
+            # Compare each instance in the current category to a randomly chosen instance
+            # from a different category within the same run.
+            for _, current_instance in current_category_df.iterrows():
+                # Randomly select one instance from other categories
+                random_other_instance = other_categories_df.sample(n=1).iloc[0]
+
+                if current_instance['score'] > random_other_instance['score']:
+                    wins_for_this_cat_in_run += 1
+                trials_for_this_cat_in_run += 1
+
+            # Aggregate wins and trials for this category across all runs
+            category_wins[current_cat_value] = category_wins.get(current_cat_value, 0) + wins_for_this_cat_in_run
+            category_trials[current_cat_value] = category_trials.get(current_cat_value, 0) + trials_for_this_cat_in_run
+
+    results = {}
+    overall_p_null = 0.5  # Null hypothesis: 50% chance of winning in a random comparison
+
+    for category, k in category_wins.items():
+        n = category_trials[category]
+        if n == 0:
+            # If no comparisons were made for this category, assign a neutral p-value
+            results[category] = 1.0
+            continue
+
+        # Calculate p-value using the binomial survival function (P(X >= k))
+        # binom.sf(k-1, n, p) gives P(X >= k)
+        p_value = binom.sf(k - 1, n, overall_p_null)
+        results[category] = p_value
+
+    return results
+
+
+def p_values_allruns(runs, cat):
+    # concatenate all the categories
+    x = pd.concat([r[cat] for r in runs]).values
+    y = pd.concat([r.score> np.median(r.score) for r in runs]).values
+    return calculate_p_values(x, y)
+
+
 
 def p_values(x, y):
     x = np.asarray(x)
     y = np.asarray(y)
     success = y >= np.median(y)
-    overall_p = .5
+    return calculate_p_values(x, success)
 
+def calculate_p_values(x, success):
+    overall_p = .5
     # Compute p-value for each category
     results = {}
     for category in np.unique(x):
@@ -95,7 +175,37 @@ def p_values(x, y):
 
 
 
+
 class FS(Simple):
+    def update(self, runs):
+        # Concatenate all runs into a single DataFrame
+        all_data = pd.concat(runs, ignore_index=True)
+
+        # Sort by score in descending order
+        all_data = all_data.sort_values(by='score', ascending=False)
+
+        # Get the top 15 of the data
+        top_data = all_data.head(15)
+
+        # Get the values for the current parameter from the top data
+        top_values = top_data[self.name].values
+
+        # Ensure we have at least two values to calculate min/max
+        if len(top_values) < 2:
+            # Fallback to original space if not enough data
+            self.sample_f = partial(hypersample, self.space.hoSpace[self.name])
+            return "Not enough data for informed sampling"
+
+        # Define the sampling range
+        min_val = np.min(top_values)
+        max_val = np.max(top_values)
+
+        # Set the sample function to a uniform distribution within this range
+        self.sample_f = partial(np.random.uniform, min_val, max_val)
+
+        return f"Sampling uniformly between {min_val:.2f} and {max_val:.2f}"
+
+class FS_old(Simple):
     def update(self,runs):
         df = runs[-1]
         mutual_info = should_learn_float(df[self.name], df.score)
@@ -125,7 +235,43 @@ def learn_float_sampler(scores,values,learntop=.4):
         # flattened = [v for s, v in zip(weights, values) for _ in range(int(s))]
         # m,s = np.mean(flattened),np.std(flattened)*.5
 
+
+
 class IS(Simple):
+    def update(self, runs):
+        # Use the logic from FS to determine the sampling range
+        all_data = pd.concat(runs, ignore_index=True)
+        all_data = all_data.sort_values(by='score', ascending=False)
+        top_data = all_data.head(15)
+        top_values = top_data[self.name].values
+
+        if len(top_values) < 2:
+            # Fallback to original space if not enough data
+            self.sample_f = partial(hypersample, self.space.hoSpace[self.name])
+            return "Not enough data for informed sampling"
+
+        min_val = np.min(top_values)
+        max_val = np.max(top_values)
+
+        # Create a sampler that generates integers within the derived range
+        # and respects the original parameter's min/max bounds
+        par_min, par_max = self.par[1][:2] # Assumes self.par is like ('int', (min, max))
+
+        def int_sampler():
+            while True:
+                # Sample from a uniform distribution within the learned float range
+                # Then round to the nearest integer
+                v = int(np.random.uniform(min_val, max_val) + 0.5)
+                # Ensure the sampled value is within the original parameter's bounds
+                if par_min <= v <= par_max:
+                    return v
+
+        self.sample_f = int_sampler
+        return f"Sampling integers uniformly between {int(min_val)} and {int(max_val)} (within {par_min}-{par_max})"
+
+
+
+class IS_old(Simple):
     def update(self,runs):
         '''
         1. check if we need to update the sampler.
