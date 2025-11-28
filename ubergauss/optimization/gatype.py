@@ -5,6 +5,8 @@ import numpy as np
 import seaborn as sns
 from hyperopt.pyll.stochastic import sample as hypersample
 from pprint import pprint
+from ubergauss.optimization import nutype as nt
+
 '''
 genetic optimization algorithm
 '''
@@ -13,11 +15,16 @@ from ubergauss.optimization import baseoptimizer
 
 class nutype(baseoptimizer.base):
 
-    def __init__(self, space, f, data, numsample = 16,hyperband=[], floatavg =0):
+    def __init__(self, space, f, data, numsample = 16,hyperband=[], **gaargs):
         super().__init__( space, f, data, numsample = numsample, hyperband = hyperband )
-        self.floatavg = floatavg
         self.seen = set()
         self.keyorder = list(self.params[0].keys())
+
+
+        self.numsample_factor = .3
+        self.maxold = .1
+        self.mutation_rate = -1
+        self.__dict__.update(gaargs)
 
     # def hashconfig(self,p):
     #     return hash(tuple(p[k] for k in self.keyorder))
@@ -27,8 +34,32 @@ class nutype(baseoptimizer.base):
 
 
     def nuParams(self):
-        select  = int(self.numsample*.5)
-        pool, weights = df_to_params(new_pool_soft(self.runs, select, maxold=.4), prin=False)
+        select  = int(self.numsample* self.numsample_factor)
+
+        # the numbers here are performance with the mutator that will is trained on runs...
+        # now we go back to the random guy but decrease p(mut)
+        # NEXT we will not decrease the mut rate this much...
+
+        #  .736 .727  .733  .724  # mutation by the nutype, just picks among the top i guess
+        #         # rapidly declining mutation rate 1/x+2_runns
+        # [0.7346172260730046, 0.7316791983025966, 0.7333095948962922, 0.7292014281240758]
+        #  SOON        # rapidly declining mutation rate 1/x+1_runns
+        # [0.7348060954354968, 0.7281709653439052, 0.7329424181284596, 0.7306674843890464]
+        # no change
+        # [0.7354194958692486, 0.7294491552450475, 0.7319857145509037, 0.7309627635849809]
+
+        if self.T==0:
+            pool, weights = df_to_params(select_top(self.runs, select), prin=False)
+
+        if self.T==1:
+            pool, weights = df_to_params(tournament_hist(self.runs,select, num_competitors= 2), prin=False)
+
+        if self.T==2:
+            pool, weights = df_to_params(new_pool_soft(self.runs, select, maxold=self.maxold), prin=False)
+
+        if self.T==3:
+            pool, weights = df_to_params(tournament_plus(self.runs,select, num_competitors= 2, old= self.maxold), prin=False)
+
         # pool, weights = clusterpool(self.runs,self.space, select)
         # pool, weights = elitist_pool(self.runs, select)
         # pool, weights = tournament(self.runs,select)
@@ -38,8 +69,8 @@ class nutype(baseoptimizer.base):
         # recombine
         new_params= []
         while len(new_params) < self.numsample:
-            # x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False, p=weights)
-            x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False)
+            x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False, p=weights)
+            # x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False)
             candidate  =  combine(pool[x],pool[y], self.space)
             # candidate = combine_aiming(pool[x],pool[y], weights[x] > weights[y], self.space)
             # candidate =  combine_dependant(pool[x],pool[y],self.paramgroups, self.space)
@@ -56,16 +87,35 @@ class nutype(baseoptimizer.base):
             #     print(candidate)
 
         self.params = self.mutate(new_params)
+        # self.params = new_params
+
+    # def mutate(self, params):
+    #     samplers = nt.create_and_update_param_samplers(self.paramgroups,  self.space, self.runs)
+    #     proba = self.mutation_rate
+    #     if proba < 0.0001:
+    #         # proba =  1/(len(self.keyorder)+2*len(self.runs)) # slowly decreasing mutation rate :)
+    #         proba =  1/(len(self.keyorder)+1) # slowly decreasing mutation rate :)
+    #     return [ self.mutate_params(param,proba, samplers) for param in params]
+    # def mutate_params(self, param,proba,  sampler):
+    #     for k in list(param.keys()):
+    #         if random.random() < proba:# + proba*isinstance(p[k], int): # double mutation rate for categoricals
+    #             # Mutate by sampling a new value from the original search space
+    #             param[k] = sampler[k].sample()[k]
+    #     return param
+
 
     def mutate(self, params):
-        return [ self.mutate_params(p,1/(len(self.keyorder)+1)) for p in params]
-
-    def mutate_params(self, p, proba):
+        return [ self.mutate_params(p) for p in params]
+    def mutate_params(self, p):
+        if self.mutation_rate < 0.0001:
+            # proba =  1/(len(self.keyorder)+1*len(self.runs)) # slowly decreasing mutation rate :)
+            proba =  1/(len(self.keyorder)+1) # slowly decreasing mutation rate :)
         for k in list(p.keys()):
             if random.random() < proba:# + proba*isinstance(p[k], int): # double mutation rate for categoricals
                 # Mutate by sampling a new value from the original search space
                 p[k] = hypersample(self.space.hoSpace[k])
         return p
+
 
 def df_to_params(dfdf, prin=False):
     # scores -= sorted.iloc[-5].score
@@ -74,18 +124,19 @@ def df_to_params(dfdf, prin=False):
     scores =  dfdf.score
     dfdf = dfdf.drop(columns=['time', 'score','config_id'])
     pool = dfdf.to_dict(orient='records')
-    weights= np.argsort(np.array(scores)) + 3
+    weights= scores-min(scores)+1#np.argsort(np.array(scores)) + 3
     return pool,weights # scores.tolist()
 
 def avg_noise(a,b,key,space):
     typ = space.space[key][0]
     a,b = a[key], b[key]
     new = random.choice([a,b])
-    # new = np.mean([a,b])
-    std = abs(a-b)*.3
+    new = np.mean([a,b])
+    std = abs(a-b)*.5
     if typ == 'int':
         std = max(std, .3)
     new = np.random.normal(new, std)
+    # new = np.mean([a,b])
     low, high = space.space[key][1][:2]
     new = max(new,low)
     new = min(high, new)
@@ -119,7 +170,7 @@ def combine_classic(a, b, space=None):
 
 
 def new_pool_soft(runs, numselect, maxold = .66):
-    # hmm i dont even need to check the len runs :0 nice
+    #
     # 1. select the best of the best
     n_combo = int(numselect*maxold)
     combo = pd.concat(runs)
@@ -202,6 +253,53 @@ def tournament(runs, numselect):
     dfdf = dfdf.iloc[indices]
     return dfdf
 
+
+
+
+def tournament_plus(runs, num_select, num_competitors=2, old = .1):
+    # candidates:
+    all_runs = pd.concat(runs)
+    n_old = int(num_select*old)
+    overall_best = all_runs.sort_values(by='score', ascending=False).iloc[0:n_old]
+    df = pd.concat([overall_best, runs[-1]]).drop_duplicates().reset_index(drop=True)
+
+    available = Range(len(df))
+    selected_indices = set()
+    # Perform tournament selection
+    while len(selected_indices) < num_select:
+        if num_competitors >= len(available):
+            break
+        competitors = df.iloc[available].sample(n=num_competitors, replace=False)
+        winner_idx = competitors['score'].idxmax()
+        selected_indices.add(winner_idx)
+        # updata available
+        available = [idx for idx in available if idx != winner_idx]
+
+    return df.loc[list(selected_indices)].drop_duplicates()
+
+def select_top(runs, num_select, num_competitors=2):
+    # candidates:
+    all_runs = pd.concat(runs)
+    return all_runs.sort_values(by='score', ascending=False).iloc[0:num_select]
+
+def tournament_hist(runs, num_select, num_competitors=2):
+    # candidates:
+    all_runs = pd.concat(runs)
+    df = all_runs.sort_values(by='score', ascending=False).iloc[0:int(len(all_runs)*.66)].reset_index(drop=True)
+
+    available = Range(len(df))
+    selected_indices = set()
+    # Perform tournament selection
+    while len(selected_indices) < num_select:
+        if num_competitors >= len(available):
+            break
+        competitors = df.iloc[available].sample(n=num_competitors, replace=False)
+        winner_idx = competitors['score'].idxmax()
+        selected_indices.add(winner_idx)
+        # updata available
+        available = [idx for idx in available if idx != winner_idx]
+
+    return df.loc[list(selected_indices)].drop_duplicates()
 
 
 
@@ -329,3 +427,49 @@ def combine_dependant(a, b, paramgroups, space):
             k2 = keys_in_group[1]
             new_params[k2] = avg_noise(a,b,k2,space)
     return new_params
+
+
+from deap import benchmarks
+from scipy.stats import gmean
+def test():
+    '''
+    just run nutype on the benchmark problems... and report average score
+    '''
+    functions = {
+        "sphere": benchmarks.sphere,
+        # "rastrigin": benchmarks.rastrigin,
+        # "rosenbrock": benchmarks.rosenbrock,
+        # "ackley": benchmarks.ackley,
+        # "schwefel": benchmarks.schwefel,
+        # "griewank": benchmarks.griewank,
+        # "h1": benchmarks.h1  # Multi-modal function
+    }
+    space  = '\n'.join([f'x{i} -5 5' for i in range(5)])
+    for name, func in functions.items():
+        print(func([5,5,5,-5,5]))
+        def f(ads,**params):
+            return -func(list(params.values()))[0]
+
+        o = nutype(space, f, data=[[0]], numsample=32, T=2)
+        [o.opti() for i in range(10)]
+        o.print()
+        return o
+
+
+
+
+def test_deap_functions():
+    dim = 10  # 50-dimensional!
+    x = np.random.uniform(-5, 5, dim)
+    functions = {
+        "sphere": benchmarks.sphere,
+        "rastrigin": benchmarks.rastrigin,
+        "rosenbrock": benchmarks.rosenbrock,
+        "ackley": benchmarks.ackley,
+        "schwefel": benchmarks.schwefel,
+        "griewank": benchmarks.griewank,
+        "h1": benchmarks.h1  # Multi-modal function
+    }
+    for name, func in functions.items():
+        result = func(x)[0]  # DEAP returns tuple
+        print(f"{name:15} | dim={dim} | f(x) = {result:.6f}")

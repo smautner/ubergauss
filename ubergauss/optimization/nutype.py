@@ -16,6 +16,18 @@ distributions are updated after a test is passed:
 '''
 
 
+def create_and_update_param_samplers(paramgroups, space, runs):
+    individual_samplers = []
+    for p_group in paramgroups:
+        param_name = p_group[0]
+        sampler = mks(space, param_name)
+        individual_samplers.append(sampler)
+
+    for sampler in individual_samplers:
+        sampler.update(runs)
+    return {s.name: s for s in individual_samplers}
+
+
 
 class nutype(baseoptimizer.base):
 
@@ -34,7 +46,7 @@ class nutype(baseoptimizer.base):
         # data = pd.concat((self.carry,self.df))
         # data = data.sort_values(by='score', ascending=False)
 
-        print(self.df[:8])
+        # print(self.df[:8])
         for s in self.samplers:
             self.key_log[s.name] = s.update(self.runs)
             print(s.name, self.key_log[s.name])
@@ -457,3 +469,36 @@ def Sampler(space, keys):
         return  Simple(space, keys[0])
     else:
         return  Samplerr(space, keys)
+
+
+
+
+from deap import benchmarks
+from scipy.stats import gmean
+def test():
+    '''
+    just run nutype on the benchmark problems... and report average score
+    '''
+    functions = {
+        "sphere": benchmarks.sphere,
+        # "rastrigin": benchmarks.rastrigin,
+        # "rosenbrock": benchmarks.rosenbrock,
+        # "ackley": benchmarks.ackley,
+        # "schwefel": benchmarks.schwefel,
+        # "griewank": benchmarks.griewank,
+        # "h1": benchmarks.h1  # Multi-modal function
+    }
+    space  = '\n'.join([f'x{i} -5 5' for i in range(5)])
+    for name, func in functions.items():
+        print(name)
+        def f(**params):
+            return -func(list(params.values()))[0]
+
+        o = nutype(space, f, data=[[]], numsample=32)
+        [o.opti() for i in range(10)]
+        o.print()
+        print(o.runs[-1])
+
+
+
+

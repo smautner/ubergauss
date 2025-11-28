@@ -19,7 +19,8 @@ import random
 
 class base():
 
-    def __init__(self, space, f, data, numsample = 16, hyperband = [] ):
+    def __init__(self, space, f, data, numsample = 16, hyperband = [], mp = True ):
+        self.mp = mp
         self.f = f
         self.data = data
         self.numsample = numsample
@@ -50,8 +51,6 @@ class base():
         return [(hb[i],hb[i+1])  for i in range(len(hb)-1)]
 
 
-
-
     def opti(self):
         for i,e in enumerate(self.params):
             e['config_id'] = i
@@ -75,8 +74,10 @@ class base():
             self.df = op.gridsearch(self.f,
                                     data_list = self.data,
                                     tasks =self.params,
-                                    mp= True)
+                                    mp= self.mp)
+
             self.df = fix(self.df)
+
 
         self.df = self.df.fillna(0)
         self.df = self.df.sort_values(by='score', ascending=False)
@@ -107,6 +108,12 @@ class base():
 
 
 def fix(df):
+    '''
+    when multiple data items are passed we need to unify them ..
+    '''
+    if 'data_id' not in df.columns:
+        return df
+
     def f(group):
         # 0:1  so we dont have a series
         result = group.iloc[0:1].copy()
@@ -114,6 +121,8 @@ def fix(df):
         result.drop(columns=['data_id'], inplace=True)
         #result['time'] = group['time'].sum()
         result['score'] = group['score'].sum()
+        # how to not have the sum of scores but the geomean?
+        result['score'] = group['score'].prod()**(1/len(group)) # for geomean
         return result
 
     return df.groupby('config_id').apply(f).reset_index(drop=True)
