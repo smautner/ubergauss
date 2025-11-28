@@ -125,7 +125,7 @@ def fix(df):
         result['score'] = group['score'].prod()**(1/len(group)) # for geomean
         return result
 
-    return df.groupby('config_id').apply(f).reset_index(drop=True)
+    return df.groupby('config_id', group_keys = True).apply(f).reset_index(drop=True)
 
 
 def clean_params(params: list[dict], df: pd.DataFrame):
@@ -142,7 +142,7 @@ def clean_params(params: list[dict], df: pd.DataFrame):
         for o in other_cols:
             if o!= 'config_id':result[o] = grp[o].sum()
         return result
-    grouped = df.groupby('config_id').apply(f).reset_index()
+    grouped = df.groupby('config_id', group_keys = True).apply(f).reset_index()
 
     # we want to reduce the param pool by 50%
     new_params = grouped.nlargest(len(params)//2, 'score')[param_cols].to_dict('records')
