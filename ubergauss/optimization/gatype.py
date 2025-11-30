@@ -69,8 +69,8 @@ class nutype(baseoptimizer.base):
         # recombine
         new_params= []
         while len(new_params) < self.numsample:
-            x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False, p=weights)
-            # x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False)
+            # x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False, p=weights)
+            x,y = np.random.choice(np.arange(len(pool)), size=2, replace=False)
             candidate  =  combine(pool[x],pool[y], self.space)
             # candidate = combine_aiming(pool[x],pool[y], weights[x] > weights[y], self.space)
             # candidate =  combine_dependant(pool[x],pool[y],self.paramgroups, self.space)
@@ -108,8 +108,8 @@ class nutype(baseoptimizer.base):
         return [ self.mutate_params(p) for p in params]
     def mutate_params(self, p):
         if self.mutation_rate < 0.0001:
-            # proba =  1/(len(self.keyorder)+1*len(self.runs)) # slowly decreasing mutation rate :)
-            proba =  1/(len(self.keyorder)+1) # slowly decreasing mutation rate :)
+            proba =  1/(len(self.keyorder)+len(self.keyorder)*0.2*len(self.runs)) # slowly decreasing mutation rate :)
+            # proba =  1/(len(self.keyorder)+1) # slowly decreasing mutation rate :)
         for k in list(p.keys()):
             if random.random() < proba:# + proba*isinstance(p[k], int): # double mutation rate for categoricals
                 # Mutate by sampling a new value from the original search space
@@ -122,7 +122,8 @@ def df_to_params(dfdf, prin=False):
     if prin:
         print(dfdf)
     scores =  dfdf.score
-    dfdf = dfdf.drop(columns=['time', 'score','config_id'])
+    # dfdf = dfdf.drop(columns=['time', 'score','config_id'])
+    dfdf = dfdf.drop(columns=['time', 'score','data_id'])
     pool = dfdf.to_dict(orient='records')
     weights= scores-min(scores)+1#np.argsort(np.array(scores)) + 3
     return pool,weights # scores.tolist()
@@ -429,31 +430,50 @@ def combine_dependant(a, b, paramgroups, space):
     return new_params
 
 
-from deap import benchmarks
 from scipy.stats import gmean
+import random
 def test():
     '''
     just run nutype on the benchmark problems... and report average score
-    '''
-    functions = {
-        "sphere": benchmarks.sphere,
-        # "rastrigin": benchmarks.rastrigin,
-        # "rosenbrock": benchmarks.rosenbrock,
-        # "ackley": benchmarks.ackley,
-        # "schwefel": benchmarks.schwefel,
-        # "griewank": benchmarks.griewank,
-        # "h1": benchmarks.h1  # Multi-modal function
-    }
-    space  = '\n'.join([f'x{i} -5 5' for i in range(5)])
-    for name, func in functions.items():
-        print(func([5,5,5,-5,5]))
-        def f(ads,**params):
-            return -func(list(params.values()))[0]
 
-        o = nutype(space, f, data=[[0]], numsample=32, T=2)
-        [o.opti() for i in range(10)]
-        o.print()
-        return o
+    i think data_id is still in the data.. check if its added by the optimizer..    !!! TODO !!!
+    maybe the optimizer needs to treat meta data seperately
+
+    # in general we should do a grid search on the params... but then we need to expose everything.. difficult..
+    '''
+    # from deap import benchmarks
+    # functions = {
+    #     "sphere": benchmarks.sphere,
+    #     # "rastrigin": benchmarks.rastrigin,
+    #     # "rosenbrock": benchmarks.rosenbrock,
+    #     # "ackley": benchmarks.ackley,
+    #     # "schwefel": benchmarks.schwefel,
+    #     # "griewank": benchmarks.griewank,
+    #     # "h1": benchmarks.h1  # Multi-modal function
+    # }
+
+    space  = '\n'.join([f'x{i} -5 5' for i in range(5)])
+    def f(ads,**params):
+
+
+        # res =  -func(list(params.values()))[0]
+        res = list(params.values())
+
+
+        f = lambda a: ((a[0]+1) * a[1])**2  + random.random()
+        # return (f(ads) * ads.a * ads.b)**2  + noise
+
+        res = - sum(map(f, enumerate(res)))
+
+
+
+        return res
+
+    o = nutype(space, f, data=[[0]], numsample=32, T=2)
+    [o.opti() for i in range(10)]
+    o.print()
+    print(o.runs[-1])
+    return o
 
 
 

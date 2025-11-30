@@ -52,10 +52,11 @@ class base():
 
 
     def opti(self):
-        for i,e in enumerate(self.params):
-            e['config_id'] = i
 
         if self.hyperband:
+            for i,e in enumerate(self.params):
+                e['config_id'] = i
+
             df = pd.DataFrame()
             for (start,end) in self.hb_pairs(self.hyperband):
                 df2 = op.gridsearch(self.f,
@@ -66,6 +67,7 @@ class base():
                 self.params, df = clean_params(self.params, df) #
             self.df=df
             self.params=lastparams
+            self.df = fix(self.df)
 
             # df2 = op.gridsearch(self.f, data_list = self.data[end:],tasks = self.params)
             # self.df = pd.concat((df,df2))
@@ -76,7 +78,6 @@ class base():
                                     tasks =self.params,
                                     mp= self.mp)
 
-            self.df = fix(self.df)
 
 
         self.df = self.df.fillna(0)
