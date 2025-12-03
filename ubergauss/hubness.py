@@ -157,8 +157,8 @@ def transform_experiments(distance_matrix, k=10, algo = 2, kiezbug = 0, kiezpres
         # Handle cases where denominator might be zero or negative
         # Replace non-positive values with epsilon before taking square root or using in division
         denominator = np.where(denominator <= 0, epsilon, denominator)
-
         distance_matrix = 1 - np.exp(- distance_matrix**2 / denominator)
+
     elif algo == 4: # nicdm : v /  np.sqrt(i*j)
          # Add a small epsilon to the denominator to avoid division by zero if knn_good[i] or knn_bad[j] is zero
         epsilon = 1e-8

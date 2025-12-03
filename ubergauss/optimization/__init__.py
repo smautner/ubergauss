@@ -15,7 +15,10 @@ def maketasks(param_dict):
 def getvalues(val):
     try:
         a, b, c = val.split()
-        r=  np.linspace(float(a), float(b), int(c))
+        if '.' in a or '.' in b:
+            r = np.linspace(float(a), float(b), int(c))
+        else:
+            r = Range(int(a), int(b), int(c))
         return r
     except:
         return eval(val)
