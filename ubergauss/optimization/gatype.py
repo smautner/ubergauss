@@ -391,8 +391,6 @@ def select_parents_by_cluster_fitness(vectors, scores, num_parents, num_clusters
 
 
 
-
-
 def combine_aiming( a, b, agb=False, space=None):
     new_params = {}
     for k in a.keys():
@@ -454,19 +452,11 @@ def test():
 
     space  = '\n'.join([f'x{i} -5 5' for i in range(5)])
     def f(ads,**params):
-
-
         # res =  -func(list(params.values()))[0]
         res = list(params.values())
-
-
         f = lambda a: ((a[0]+1) * a[1])**2  + random.random()
         # return (f(ads) * ads.a * ads.b)**2  + noise
-
         res = - sum(map(f, enumerate(res)))
-
-
-
         return res
 
     o = nutype(space, f, data=[[0]], numsample=32, T=2)
