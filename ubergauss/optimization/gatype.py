@@ -6,6 +6,7 @@ import seaborn as sns
 from hyperopt.pyll.stochastic import sample as hypersample
 from pprint import pprint
 from ubergauss.optimization import nutype as nt
+from ubergauss.optimization import gansga as gans
 
 '''
 genetic optimization algorithm
@@ -36,18 +37,6 @@ class nutype(baseoptimizer.base):
     def nuParams(self):
         select  = int(self.numsample* self.numsample_factor)
 
-        # the numbers here are performance with the mutator that will is trained on runs...
-        # now we go back to the random guy but decrease p(mut)
-        # NEXT we will not decrease the mut rate this much...
-
-        #  .736 .727  .733  .724  # mutation by the nutype, just picks among the top i guess
-        #         # rapidly declining mutation rate 1/x+2_runns
-        # [0.7346172260730046, 0.7316791983025966, 0.7333095948962922, 0.7292014281240758]
-        #  SOON        # rapidly declining mutation rate 1/x+1_runns
-        # [0.7348060954354968, 0.7281709653439052, 0.7329424181284596, 0.7306674843890464]
-        # no change
-        # [0.7354194958692486, 0.7294491552450475, 0.7319857145509037, 0.7309627635849809]
-
         if self.T==0:
             pool, weights = df_to_params(select_top(self.runs, select), prin=False)
 
@@ -66,6 +55,7 @@ class nutype(baseoptimizer.base):
         # pool, weights = toprando(self.runs,select)
         # pool, weights = expo_select(self.runs,select)
         weights = weights / np.sum(weights)
+
         # recombine
         new_params= []
         while len(new_params) < self.numsample:
@@ -89,19 +79,13 @@ class nutype(baseoptimizer.base):
         self.params = self.mutate(new_params)
         # self.params = new_params
 
-    # def mutate(self, params):
-    #     samplers = nt.create_and_update_param_samplers(self.paramgroups,  self.space, self.runs)
-    #     proba = self.mutation_rate
-    #     if proba < 0.0001:
-    #         # proba =  1/(len(self.keyorder)+2*len(self.runs)) # slowly decreasing mutation rate :)
-    #         proba =  1/(len(self.keyorder)+1) # slowly decreasing mutation rate :)
-    #     return [ self.mutate_params(param,proba, samplers) for param in params]
-    # def mutate_params(self, param,proba,  sampler):
-    #     for k in list(param.keys()):
-    #         if random.random() < proba:# + proba*isinstance(p[k], int): # double mutation rate for categoricals
-    #             # Mutate by sampling a new value from the original search space
-    #             param[k] = sampler[k].sample()[k]
-    #     return param
+
+
+        # take all the runs, vectorize them using GA
+        # learn UMAP, plot last run using matplotlib (scores= viridis colors, log transformed as there are always a few very bad ones)
+        # vectorize self.param and draw red dots
+        # call here but write the code into gansga.py
+
 
 
     def mutate(self, params):
@@ -199,7 +183,7 @@ def new_pool_soft(runs, numselect, maxold = .66):
 def clusterpool(runs,space,num_parents):
     # 1. make a copy of df and pop data_id time and score
     df = pd.concat(runs)
-    vectors = df_to_vec(df,space)
+    vectors = gans.df_to_vec(df,space)
     # 3. select instances based on clusters and fitness
     scores = df['score'].tolist()
     selected_indices = select_parents_by_cluster_fitness(vectors, scores, num_parents)
@@ -304,40 +288,6 @@ def tournament_hist(runs, num_select, num_competitors=2):
 
 
 
-
-from sklearn.preprocessing import OneHotEncoder
-def df_to_vec(df,space):
-    '''
-    clean and vectorize
-    '''
-    df_clean = df.copy()
-    cols_to_drop = ['time', 'config_id', 'score']
-    df_clean = df_clean.drop(columns=cols_to_drop)
-    # 2. vectorize
-    param_dicts = df_clean.to_dict(orient='records')
-    categorical_keys = [k for k, v in space.space.items() if v[0] == 'cat']
-    return vectorize_parameters(param_dicts, categorical_keys)
-
-
-
-def vectorize_parameters(param_dicts, categorical_keys):
-    numeric_features = []
-    categorical_features = []
-    for d in param_dicts:
-        numeric_features.append([v for k, v in d.items() if k not in categorical_keys])
-        categorical_features.append([d[k] for k in categorical_keys])
-    encoder = OneHotEncoder(sparse=False, handle_unknown='ignore')
-    categorical_encoded = encoder.fit_transform(categorical_features)
-    X = np.hstack([numeric_features, categorical_encoded])
-
-    # Column-wise min-max scaling of the entire matrix
-    min_vals = X.min(axis=0)
-    max_vals = X.max(axis=0)
-    ranges = max_vals - min_vals
-    ranges[ranges == 0] = 1  # Prevent divide-by-zero
-    X = (X - min_vals) / ranges
-
-    return X
 
 
 from sklearn.cluster import KMeans
