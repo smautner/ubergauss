@@ -107,7 +107,7 @@ def format_dist_ind(matrix,k, rmdiag = True):
 
 
 
-def transform_experiments(distance_matrix, k=10, algo = 2, kiezbug = 0, kiezpresort = 0):
+def transform_experiments(distance_matrix, k=10, algo = 2, kiezbug = 0, kiezpresort = 0, startfrom = 1):
     '''
 
     '''
@@ -125,7 +125,7 @@ def transform_experiments(distance_matrix, k=10, algo = 2, kiezbug = 0, kiezpres
     n = distance_matrix.shape[0]
 
     # Compute KNN mean distances
-    startfrom = 1
+    # startfrom = 1
     knn_indices = np.argpartition(distance_matrix, k + startfrom, axis=1)[:, :k + startfrom]
     knn_distances = np.take_along_axis(distance_matrix, knn_indices, axis=1)
     knn_distances = np.sort(knn_distances, axis=1) # Sort the k+startfrom selected distances
