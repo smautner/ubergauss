@@ -24,6 +24,7 @@ class nutype(baseoptimizer.base):
         self.numsample_factor = 0.3
         self.maxold = 0.1
         self.mutation_rate = -1
+        self.T= 0
         self.__dict__.update(gaargs)
 
         # UMAP visualization state
@@ -89,20 +90,19 @@ class nutype(baseoptimizer.base):
         self.params = self.mutate(new_params)
         # self.params = new_params
 
-        # take all the runs, vectorize them using GA
-        # learn UMAP, plot last run using matplotlib (scores= viridis colors, log transformed as there are always a few very bad ones)
-        # vectorize self.param and draw red dots
-        # call here but write the code into gansga.py
-        self.umap_reducer = gans.plot_umap_visualization(
-            self.runs,
-            self.params,
-            self.space,
-            self.umap_reducer,
-            pool,
-        )
-
-        # wait for user to press enter
-        input("Press Enter to continue...")
+        # # take all the runs, vectorize them using GA
+        # # learn UMAP, plot last run using matplotlib (scores= viridis colors, log transformed as there are always a few very bad ones)
+        # # vectorize self.param and draw red dots
+        # # call here but write the code into gansga.py
+        # self.umap_reducer = gans.plot_umap_visualization(
+        #     self.runs,
+        #     self.params,
+        #     self.space,
+        #     self.umap_reducer,
+        #     pool,
+        # )
+        # # wait for user to press enter
+        # input("Press Enter to continue...")
 
     def mutate(self, params):
         return [self.mutate_params(p) for p in params]

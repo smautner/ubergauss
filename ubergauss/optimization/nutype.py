@@ -473,12 +473,12 @@ def Sampler(space, keys):
 
 
 
-from deap import benchmarks
 from scipy.stats import gmean
 def test():
     '''
     just run nutype on the benchmark problems... and report average score
     '''
+    from deap import benchmarks
     functions = {
         "sphere": benchmarks.sphere,
         # "rastrigin": benchmarks.rastrigin,
