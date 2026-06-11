@@ -39,7 +39,7 @@ def update_version_py():
     if p.returncode != 0:
         print(f"unable to run git, leaving {packname}/__version__.py alone")
         return
-    ver = "0.0."+stdout.strip()
+    ver = "0.1."+stdout.strip()
     #ver = str(int(ubergauss,16)) # pypi doesnt like base 16
     f = open(f"{packname}/__version__.py", "w")
     f.write(VERSION_PY % ver)

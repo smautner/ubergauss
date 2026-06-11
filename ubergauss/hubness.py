@@ -1,179 +1,64 @@
+
+
+
+
 import numpy as np
-import sklearn
+from sklearn.preprocessing import normalize
+from sklearn.metrics import pairwise_distances
+from typing import Union
 
 
+# do not be lazy, this is a test, argpartition does now guarantee the smallest version be in the front, fix make _mean_k_smallest to handle this correctly
 
+def _mean_k_smallest(values: np.ndarray, k: int, axis: int, skip_first: bool) -> np.ndarray:
+    start = 1 if skip_first else 0
+    k_idx = k + start
+    # Partition to isolate the smallest elements
+    partitioned = np.argpartition(values, kth=k_idx - 1, axis=axis)
+    # Extract only the k indices we care about
+    idx_slice = [slice(None)] * values.ndim
+    idx_slice[axis] = slice(0, k_idx)
+    top_indices = partitioned[tuple(idx_slice)]
+    # Retrieve the actual values
+    selected = np.take_along_axis(values, top_indices, axis=axis)
+    # Sort the selected values to ensure the first one is indeed the smallest for skip_first
+    selected = np.sort(selected, axis=axis)
+    # Slice skip_first and average
+    final_slice = [slice(None)] * values.ndim
+    final_slice[axis] = slice(start, None)
+    return selected[tuple(final_slice)].mean(axis=axis)
 
-def transform(X,Y, k=10, algo = 2,  kstart = 1, metric = 'cosine'):
-    X = sklearn.metrics.pairwise_distances(X, Y, metric=metric)
-    return justtransform(X, k=k, algo = algo,  kstart = kstart)
-
-def justtransform(distance_matrix, k=10, algo = 2,  kstart = 1):
-    '''
-    k for the neighbors
-    algo for the algorithm
-    kstart use k neighbors starting from here, to not have the
-    '''
-    k= int(k)
-    algo = int(algo)
-
-    if algo == 0:
-        return distance_matrix
-    if algo == 1:
-        return sklearn.preprocessing.normalize(distance_matrix, axis = 0)
-    funcs = [csls_, ls, nicdm, ka]
-    f = funcs[algo-2]
-
-    n = distance_matrix.shape[0]
-    knn = np.partition(distance_matrix, k+kstart , axis=1)[:, :k+kstart ]  # +1 to account for self
-    knn = np.sort(knn, axis = 1)
-    knn = knn[:,kstart :].mean(axis = 1)
-
-    # Apply scaling
-    for i in range(n):
-        for j in range(n):
-            v = distance_matrix[i,j]
-            distance_matrix[i,j]  =  f(v,knn[i],knn[j])
-    return distance_matrix
-
-def transform_experiments_SLOW(distance_matrix, k=10, algo = 2, kiezbug = 0, kiezpresort = 50):
+def transform(
+    X: np.ndarray,
+    Y: Union[np.ndarray, None] = None,
+    k: int = 10,
+    algo: int = 2,
+    metric: str = 'cosine',
+    skip_diag: bool = True
+) -> np.ndarray:
     """
-    0 -> do nothing
-    1 -> normalize by norm
-    2 -> csls
-    3 -> ls
-    4 -> nicdm
+    algo: 0=None, 1=Norm, 2=CSLS, 3=LS, 4=NICDM, 5=KA
     """
+    if Y is not None:
+        assert (X is Y) == skip_diag, 'skip_diag iff y=x'
+    dist = X if Y is None else pairwise_distances(X, Y, metric=metric)
+    if algo == 0: return dist
+    if algo == 1: return normalize(dist, axis=0)
 
-    # assert distance_matrix[0][0] < distance_matrix[0][1], 'checking if this is a distance matrix'
-    k= int(k)
-    algo = int(algo)
-    kiezbug = int(kiezbug)
-    kiezpresort = int(kiezpresort)
+    # Calculate local scaling factors
+    r_i = _mean_k_smallest(dist, k, axis=1, skip_first=skip_diag)[:, np.newaxis]
+    r_j = _mean_k_smallest(dist, k, axis=0, skip_first=skip_diag)[np.newaxis, :]
 
-    if algo == 0:
-        return distance_matrix
-    if algo == 1:
-        return sklearn.preprocessing.normalize(distance_matrix, axis = 0)
+    eps = 1e-8
+    if algo == 2: # CSLS
+        return 2.0 * dist - r_i - r_j
+    if algo == 3: # LS
+        return 1.0 - np.exp(-(dist**2) / np.maximum(r_i * r_j, eps))
+    if algo == 4: # NICDM
+        return dist / np.sqrt(np.maximum(r_i * r_j, eps))
+    if algo == 5: # KA
+        return (dist / np.maximum(r_i, eps)) + (dist / np.maximum(r_j, eps))
 
-    # if algo == 2:
-    #     return MP(distance_matrix, k + 15)
-
-    funcs = [csls_, ls, nicdm, ka]
-    f = funcs[algo-2]
-
-    n = distance_matrix.shape[0]
-    # scaled_distances = distance_matrix.copy()
-    startfrom = 1
-    knn = np.partition(distance_matrix, k+startfrom , axis=1)[:, :k+startfrom ]  # +1 to account for self
-    knn = np.sort(knn, axis = 1)
-    knn_good = knn[:,startfrom :].mean(axis = 1)
-    if kiezbug:
-        knn_bad =  knn[:,:-1].mean(axis = 1)
-    else:
-        knn_bad = knn_good
-
-    # MAKING THINGS WORSE
-    if kiezpresort:
-        np.fill_diagonal(distance_matrix, 99999)
-        stuff = np.argpartition(distance_matrix, kiezpresort, axis=1)[:,kiezpresort:]
-        # we dont want to set the value we want to add, how would we do that?
-        distance_matrix[np.arange(n)[:, None], stuff] += 99999
-        # np.put_along_axis(distance_matrix, stuff, 99999, axis=1)
-
-    # Apply scaling
-    for i in range(n):
-        for j in range(n):
-            v = distance_matrix[i,j]
-            distance_matrix[i,j]  =  f(v,knn_good[i],knn_bad[j])
-
-    return distance_matrix
-
-def csls_(v,i,j):
-    return v*2 -i -j
-def ls(v,i,j):
-    return 1- np.exp(- v**2/(i*j) )
-def nicdm(v,i,j):
-    return v /  np.sqrt(i*j)
-def ka(v,i,j):
-    return v / i +  v/j
-
-def format_dist_ind(matrix,k, rmdiag = True):
-    matrix2 = matrix.copy()
-    if rmdiag:
-        np.fill_diagonal(matrix2, 99999)
-    mask = np.argsort(matrix2, axis=1)[:,:k]
-    return np.take_along_axis(matrix, mask, axis=1), mask
+    return dist
 
 
-
-def transform_experiments(distance_matrix, k=10, algo = 2, kiezbug = 0, kiezpresort = 0, startfrom = 1):
-    '''
-
-    '''
-    k= int(k)
-    algo = int(algo)
-    kiezbug = int(kiezbug)
-    kiezpresort = int(kiezpresort)
-
-    if algo == 0:
-        return distance_matrix
-    if algo == 1:
-        return sklearn.preprocessing.normalize(distance_matrix, axis = 0)
-
-
-    n = distance_matrix.shape[0]
-
-    # Compute KNN mean distances
-    # startfrom = 1
-    knn_indices = np.argpartition(distance_matrix, k + startfrom, axis=1)[:, :k + startfrom]
-    knn_distances = np.take_along_axis(distance_matrix, knn_indices, axis=1)
-    knn_distances = np.sort(knn_distances, axis=1) # Sort the k+startfrom selected distances
-    knn_good = knn_distances[:, startfrom:].mean(axis=1) # Mean from startfrom
-
-    if kiezbug:
-        knn_bad =  knn_distances[:, :-1].mean(axis=1) # Mean from 0 up to k+startfrom-1
-    else:
-        knn_bad = knn_good
-
-    # MAKING THINGS WORSE (as in the original function)
-    if kiezpresort:
-        temp_matrix = distance_matrix.copy()
-        np.fill_diagonal(temp_matrix, np.inf) # Use infinity or a large value
-        stuff_indices = np.argsort(temp_matrix, axis=1)[:, kiezpresort:] # Sort fully and take the large distances
-        row_indices = np.arange(n)[:, None] # Column vector [0, 1, ..., n-1].T
-        distance_matrix[row_indices, stuff_indices] += 99999
-
-    # Apply scaling using broadcasting
-    knn_good_col = knn_good[:, None] # Shape (n, 1)
-    knn_bad_row = knn_bad[None, :]   # Shape (1, n)
-
-    if algo == 2: # csls_ : v*2 - i - j
-        distance_matrix = distance_matrix * 2 - knn_good_col - knn_bad_row
-    elif algo == 3: # ls : 1 - np.exp(- v**2/(i*j) )
-        # Add a small epsilon to the denominator to avoid division by zero if knn_good[i] or knn_bad[j] is zero
-        epsilon = 1e-8
-        denominator = (knn_good_col * knn_bad_row)
-        # Handle cases where denominator might be zero or negative
-        # Replace non-positive values with epsilon before taking square root or using in division
-        denominator = np.where(denominator <= 0, epsilon, denominator)
-        distance_matrix = 1 - np.exp(- distance_matrix**2 / denominator)
-
-    elif algo == 4: # nicdm : v /  np.sqrt(i*j)
-         # Add a small epsilon to the denominator to avoid division by zero if knn_good[i] or knn_bad[j] is zero
-        epsilon = 1e-8
-        denominator = (knn_good_col * knn_bad_row)
-        # Handle cases where denominator might be zero or negative
-        # Replace non-positive values with epsilon before taking square root or using in division
-        denominator = np.where(denominator <= 0, epsilon, denominator)
-        distance_matrix = distance_matrix / np.sqrt(denominator)
-
-    elif algo == 5: # ka : v / i +  v/j
-        # Add a small epsilon to denominators to avoid division by zero
-        epsilon = 1e-8
-        knn_good_col = np.where(knn_good_col <= 0, epsilon, knn_good_col)
-        knn_bad_row = np.where(knn_bad_row <= 0, epsilon, knn_bad_row)
-
-        distance_matrix = distance_matrix / knn_good_col + distance_matrix / knn_bad_row
-
-    return distance_matrix

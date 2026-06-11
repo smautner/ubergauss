@@ -19,7 +19,7 @@ import random
 
 class base():
 
-    def __init__(self, space, f, data, numsample = 16, hyperband = [], mp = True ):
+    def __init__(self, space, f, data, numsample = 16,n_init = 0, hyperband = [], mp = True ):
         self.mp = mp
         self.f = f
         self.data = data
@@ -30,7 +30,8 @@ class base():
             self.numsample = numsample * 2**(len(hyperband))
 
         space  = ho.spaceship(space)
-        self.params =  [space.sample() for x in range(self.numsample) ]
+        if not n_init: n_init = numsample
+        self.params =  [space.sample() for x in range(n_init) ]
         self.space = space
         self.scores = []
         self.runs = []
@@ -60,8 +61,8 @@ class base():
             df = pd.DataFrame()
             for (start,end) in self.hb_pairs(self.hyperband):
                 df2 = op.gridsearch(self.f,
-                                    data_list = self.data[start:end],
-                                    tasks =self.params)
+                                    data = self.data[start:end],
+                                    tasks = self.params)
                 df = pd.concat((df,df2))
                 lastparams = self.params.copy()
                 self.params, df = clean_params(self.params, df) #
@@ -74,7 +75,7 @@ class base():
 
         if not self.hyperband:
             self.df = op.gridsearch(self.f,
-                                    data_list = self.data,
+                                    data = self.data,
                                     tasks =self.params,
                                     mp= self.mp)
 

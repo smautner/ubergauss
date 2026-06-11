@@ -16,16 +16,19 @@ from ubergauss.optimization import baseoptimizer
 
 
 class nutype(baseoptimizer.base):
-    def __init__(self, space, f, data, numsample=16, hyperband=[], **gaargs):
-        super().__init__(space, f, data, numsample=numsample, hyperband=hyperband)
+    def __init__(self, space, f, data, numsample=32,n_init=64, **gaargs):
+        super().__init__(space, f, data, numsample=numsample,n_init = n_init)
+
         self.seen = set()
         self.keyorder = list(self.params[0].keys())
 
-        self.numsample_factor = 0.3
-        self.maxold = 0.1
-        self.mutation_rate = -1
-        self.T= 0
+        # self.maxold = 0.1
+        self.mutation_factor = 0.5
+        self.T= 2
+        self.select_factor = .34
+        self.top_factor = .08
         self.__dict__.update(gaargs)
+
 
         # UMAP visualization state
         self.umap_reducer = None
@@ -37,7 +40,8 @@ class nutype(baseoptimizer.base):
     #         self.seen.add(self.hashconfig(e))
 
     def nuParams(self):
-        select = int(self.numsample * self.numsample_factor)
+        select = int(self.numsample * (self.select_factor + self.top_factor))
+        n_top = int(self.numsample *  self.top_factor)
 
         # Track which parents are selected from the last run
         selected_df = None
@@ -51,7 +55,7 @@ class nutype(baseoptimizer.base):
             pool, weights = df_to_params(selected_df, prin=False)
 
         if self.T == 2:
-            selected_df = new_pool_soft(self.runs, select, maxold=self.maxold)
+            selected_df = new_pool_soft(self.runs, select, n_top = n_top)
             pool, weights = df_to_params(selected_df, prin=False)
 
         if self.T == 3:
@@ -108,11 +112,14 @@ class nutype(baseoptimizer.base):
         return [self.mutate_params(p) for p in params]
 
     def mutate_params(self, p):
-        if self.mutation_rate < 0.0001:
-            proba = 1 / (
-                len(self.keyorder) + len(self.keyorder) * 0.2 * len(self.runs)
-            )  # slowly decreasing mutation rate :)
-            # proba =  1/(len(self.keyorder)+1) # slowly decreasing mutation rate :)
+        # if self.mutation_rate < 0.0001:
+
+            # proba = 1 / (
+            #     len(self.keyorder) + len(self.keyorder) * 0.2 * len(self.runs)
+            # )  # slowly decreasing mutation rate :)
+
+        proba =  1/(len(self.keyorder)+1) # slowly decreasing mutation rate :)
+        proba = proba*self.mutation_factor
         for k in list(p.keys()):
             if (
                 random.random() < proba
@@ -128,7 +135,9 @@ def df_to_params(dfdf, prin=False):
         print(dfdf)
     scores = dfdf.score
     # dfdf = dfdf.drop(columns=['time', 'score','config_id'])
-    dfdf = dfdf.drop(columns=["time", "score", "data_id"])
+
+    dfdf = dfdf.drop(columns=[c for c in ["time", "score", "data_id"] if c in dfdf.columns])
+
     pool = dfdf.to_dict(orient="records")
     weights = scores - min(scores) + 1  # np.argsort(np.array(scores)) + 3
     return pool, weights  # scores.tolist()
@@ -178,14 +187,14 @@ def combine_classic(a, b, space=None):
     return new_params
 
 
-def new_pool_soft(runs, numselect, maxold=0.66):
+def new_pool_soft(runs, numselect, n_top):
     #
     # 1. select the best of the best
-    n_combo = int(numselect * maxold)
-    combo = pd.concat(runs)
-    combo = combo.sort_values(by="score", ascending=False).head(n_combo)
+    top = pd.concat(runs)
+    top = top.sort_values(by="score", ascending=False).head(n_top)
+
     # 2. concatenate with newest, sort, remove duplicates and head
-    final = pd.concat([combo, runs[-1]])
+    final = pd.concat([top, runs[-1]])
     final = final.sort_values(by="score", ascending=False)
     final = final.drop_duplicates().head(numselect)
     return final

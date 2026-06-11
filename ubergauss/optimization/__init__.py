@@ -11,6 +11,11 @@ from sklearn.model_selection import  BaseCrossValidator
 def maketasks(param_dict):
     return [dict(zip(param_dict.keys(), values)) for values in product(*param_dict.values())]
 
+# def maketasks(param_dict):
+#     keys = param_dict.keys()
+#     for values in product(*param_dict.values()):
+#         yield dict(zip(keys, values))
+
 
 def getvalues(val):
     try:
@@ -36,12 +41,12 @@ def string_to_param_dict(text):
     return result
 
 import time
-def gridsearch(func,data_list = None, *, param_dict = False, tasks = False, taskfilter =None,
+def gridsearch(func,data = None, *, param_dict = False, tasks = False, taskfilter =None,
                score = 'score',mp = True,  df = True, param_string = False , timevar=f'time', **kwargs):
     '''
     ways to provide tasks:
         # data
-        - data_list [tupple being passed as *,..]
+        - data
 
         # tasks
         - tasks: ive me a task list of dictionaries
@@ -55,7 +60,6 @@ def gridsearch(func,data_list = None, *, param_dict = False, tasks = False, task
     # setting up tasks
     ##########
     assert sum( [type(x) == bool for x in [param_string, param_dict, tasks]] )  == 2, 'we expect 2 to be false'
-    assert len(data_list) > 0
     if param_string:
         param_dict = string_to_param_dict(param_string)
     if param_dict:
@@ -65,25 +69,27 @@ def gridsearch(func,data_list = None, *, param_dict = False, tasks = False, task
 
     def func2(t):
         start = time.time()
-        try:
-            t.update(kwargs)
-            data = t.pop('data_id')
-            res = func(*data_list[data],**t)
-        except Exception as e:
-            print(f"EXCEPTION:")
-            traceback.print_exc()
-            print(f"PARAMS:")
-            print(t)
-            print(f"EXCEPTION END")
-            res = None
+        # try:
+
+        t.update(kwargs)
+        # data = t.pop('data_id')
+        res = func(data,**t)
+
+        # except Exception as e:
+        #     print(f"EXCEPTION:")
+        #     traceback.print_exc()
+        #     print(f"PARAMS:")
+        #     print(t)
+        #     print(f"EXCEPTION END")
+        #     res = None
+
         return res, time.time()-start
 
-    def mktask(d,e):
-        e=e.copy()
-        e['data_id'] = d
-        return e
-
-    tasks = [ mktask(d,e) for d in range(len(data_list)) for tid,e in enumerate(tasks) ]
+    # def mktask(d,e):
+    #     e=e.copy()
+    #     e['data_id'] = d
+    #     return e
+    # tasks = [ mktask(d,e) for d in range(len(data_list)) for tid,e in enumerate(tasks) ]
 
     if mp:
         res = ut.xxmap(func2, tasks)
@@ -108,6 +114,9 @@ def gridsearch(func,data_list = None, *, param_dict = False, tasks = False, task
 
         return r
     return tasks
+
+
+
 
 def df_remove_duplicates(grid_df, return_unique=False):
     unique = grid_df.nunique(dropna=False)
@@ -258,3 +267,37 @@ def split_dataframe(df, column_names):
 
 if __name__ == "__main__":
     test_grid_optimizer()
+
+
+
+
+def make_configs(param_dict=None, param_string=None, tasks=None, taskfilter=None):
+    if param_string:
+        param_dict = string_to_param_dict(param_string)
+    if param_dict:
+        tasks = maketasks(param_dict)
+    if taskfilter:
+        tasks = [t for t in tasks if taskfilter(t)]
+    return tasks
+
+def gridsearch2(func, params, **kwargs):
+
+    def wrapper(task):
+        # RUN
+        start = time.time()
+        t= task.copy()
+        t.update(kwargs)
+        res = func(**t)
+        duration = time.time() - start
+
+        # the result is task
+        if isinstance(res, dict):
+            task.update(res)
+        else:
+            task['score'] = res
+        task['time'] = duration
+        return task
+    results = ut.xxmap(wrapper, full_tasks) if kwargs.get('mp', True) else Map(wrapper, full_tasks)
+    # df = pd.DataFrame([r for r in results if r is not None])
+    return pd.DataFrame(results)
+

@@ -35,13 +35,16 @@ def xmap(func, iterable, n_jobs=None, tasksperchild = 1, **kwargs):
 
 def xxmap(func, iterable, n_jobs=None, tasksperchild = 1, **kwargs):
     '''if in a subprocess we do sequencial map else do distributed map'''
-
     if current_process().name == 'MainProcess' and n_jobs not in [0,1]:
         #mp.set_start_method('fork')
         return xmap(func, iterable, n_jobs=n_jobs, tasksperchild = tasksperchild, **kwargs)
-
     return Map(func,iterable,**kwargs)
 
+def xxxmap(func, iterable, n_jobs=None, tasksperchild = 1, **kwargs):
+    func = partial(func, **kwargs)
+    with Pool(n_jobs, initializer=worker_init, initargs=(func,),maxtasksperchild = tasksperchild) as p:
+        yield from p.imap(worker, iterable)
+        # return p.imap(worker, iterable)
 
 def test_xmap():
     def f(x,y=0):
